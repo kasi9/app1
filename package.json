@@ -1,0 +1,11 @@
+{
+  "scripts": {
+    "srv": "cd server && npm run srv",
+    "cli": "cd client && npm run dev",
+    "app1": "concurrently \"npm run srv\" \"npm run cli\""
+  },
+  "dependencies": {
+    "concurrently": "^9.2.1",
+    "git-filter-repo": "^0.0.30"
+  }
+}

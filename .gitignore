@@ -1,0 +1,40 @@
+# Node.js dependencies
+node_modules/
+
+package-lock.json
+#package.json
+.vscode
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Build artifacts and temporary files
+build/
+dist/
+public/build
+coverage/
+*.tgz
+.DS_Store # macOS specific
+/*.idea/ # IDE specific (e.g., WebStorm)
+
+# If client and server node_modules are in subdirectories (e.g., /client and /server)
+# uncomment or adjust the following lines if needed:
+# client/node_modules/
+# server/node_modules/
+
+# Optional: Log files, testing, and additional OS files
+logs
+*.log
+test-output/
+tmp/
+.eslintcache

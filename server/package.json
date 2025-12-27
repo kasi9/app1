@@ -1,0 +1,32 @@
+{
+  "name": "application1",
+  "version": "1.0.0",
+  "description": "Organization setup and Security model",
+  "main": "server.js",
+  "scripts": {
+    "srv": "node server.js" 
+  },
+  "type": "module",
+  "author": "Kasi Viswanatha Raju Penmatsa",
+  "license": "ISC",
+  "dependencies": {
+    "@google-cloud/storage": "^7.18.0",
+    "@tailwindcss/vite": "^4.1.14",
+    "axios": "^1.12.0",
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "express-validator": "^7.2.1",
+    "jsonwebtoken": "^9.0.2",
+    "jwt-decode": "^4.0.0",
+    "lodash": "^4.17.21",
+    "mongoose": "^8.18.0",
+    "multer": "^2.0.2",
+    "tailwindcss": "^4.1.14"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "nodemon": "^3.1.10"
+  }
+}
