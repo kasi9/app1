@@ -1,7 +1,28 @@
 import axios, { type AxiosRequestConfig } from "axios";
 import { toast } from "react-toastify";
+import { useLoadingContext } from "../context/useLoadingContext";
+
 
 export const api = axios.create({ baseURL: import.meta.env.VITE_API_URL, timeout: 1000*60*5, }); // timeout 5 minutes
+
+// ---- Request counter (handles parallel calls) ----
+let requestCount = 0;
+
+const showGlobalLoader = () => {
+  requestCount++;
+  window.__showLoader?.();
+};
+
+const hideGlobalLoader = () => {
+  requestCount = Math.max(0, requestCount - 1);
+  if (requestCount === 0) window.__hideLoader?.();
+};
+
+// ---- Bridge: register loader functions ----
+export const registerAxiosLoader = (show: () => void, hide: () => void) => {
+  window.__showLoader = show;
+  window.__hideLoader = hide;
+};
 
 export interface CustomAxiosConfig extends AxiosRequestConfig {
   hideMessage?: boolean;
@@ -12,7 +33,7 @@ const prepareErrorMessage = (message: string, errors: string[]) => {
 };
 
 api.interceptors.request.use((config) => {
-
+    showGlobalLoader();
     const token = localStorage.getItem("token"); 
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
@@ -26,6 +47,7 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
 
     (response) => {
+        hideGlobalLoader();
         const config = response.config as CustomAxiosConfig;
         const errMessage = prepareErrorMessage(response.data.message, response.data.errors);
 
@@ -38,6 +60,7 @@ api.interceptors.response.use(
         return response;
     },
     (err) => {
+        hideGlobalLoader();
 //        const errMessage = prepareErrorMessage(err.response.data.message, err.response.data.errors);
         const errMessage = prepareErrorMessage(err.response.data.message, err.response.data.data.errors);
 

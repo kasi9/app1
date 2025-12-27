@@ -1,26 +1,11 @@
 import axios from "axios";
-import { useContext, useEffect } from "react";
+import { useContext } from "react";
 import { toast } from "react-toastify";
 import { AppContent } from "../context/AppContext";
-import { useLoading } from "../context/useLoading";
 
 const Home = () => {
   
     const { baseURL } = useContext(AppContent)!;
-    const { showLoading, hideLoading } = useLoading();
-
-
-useEffect(() => {
-  showLoading();
-
-  const t = setTimeout(() => {
-    console.log("test loading");
-    hideLoading();
-  }, 10000);
-
-  return () => clearTimeout(t);
-}, []);
-
 
   const insertDefaultData = async () => {
     const defaultData = 
@@ -38,7 +23,6 @@ useEffect(() => {
 	{ "code": "link", "name": "Link", "actions": ["Read","Create", "Update", "Delete", "Active"]},
 	{ "code": "place", "name": "Place", "actions": ["Read","Create", "Update", "Delete", "Active"]},
 ] ;
-
 
     await axios.post(`${baseURL}/privilege/bulkinsert`, defaultData);
     toast.success('Default data created');

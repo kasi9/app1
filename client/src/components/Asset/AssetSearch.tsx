@@ -11,7 +11,6 @@ import type { Asset } from "../../types/asset.type";
 import AssetViewer, { type AssetViewerRef } from "./AssetViewer";
 import { toast } from "react-toastify";
 import { api, type CustomAxiosConfig } from "../../context/api";
-import { useLoading } from "../../context/useLoading";
 
 export interface AssetSearchRef { 
     selectedItems: () => Asset[];
@@ -33,7 +32,6 @@ interface SortRule { field: keyof Asset; order: SortOrder; }
 const AssetSearch = forwardRef<AssetSearchRef, AssetSearchProps> (({ onSelectionChange, onLoad }, ref)=>{
 
     const { baseURL } = useContext(AppContent)!;
-    const { showLoading, hideLoading } = useLoading();
     const { actions, getActions } = useUser();
     const { trackAction } = useAudit();
     
@@ -114,10 +112,7 @@ const AssetSearch = forwardRef<AssetSearchRef, AssetSearchProps> (({ onSelection
 
     const getData = async (pageNo: number) => {
 
-        showLoading();
         const res = await api.get(`${baseURL}/assets/${pageSize}/${pageNo}/${JSON.stringify(filterRules)}/${JSON.stringify(sortRules)}/${search ? search : '_'}/${JSON.stringify(selectedTags)}`) ;
-        hideLoading();
-
         setAssets(res.data.result);          
         setTotalPages(res.data.totalPages); 
         
@@ -133,7 +128,6 @@ const AssetSearch = forwardRef<AssetSearchRef, AssetSearchProps> (({ onSelection
             if (!window.confirm('Are you sure you want to delete?'))
                 return null ;
 
-            showLoading();
             await Promise.all(
                 selectedItems.map(i =>
                     api.delete(`${baseURL}/assets/${i._id}`, { hideMessage: true } as CustomAxiosConfig)
@@ -146,7 +140,6 @@ const AssetSearch = forwardRef<AssetSearchRef, AssetSearchProps> (({ onSelection
             }
             await setCurrentPage(1);
             await getData(1); 
-            hideLoading();
             onSelectionChange(selectedItems);
     }
 
@@ -185,10 +178,8 @@ const AssetSearch = forwardRef<AssetSearchRef, AssetSearchProps> (({ onSelection
         }
         else {
             try{
-                showLoading();
                 const res = await api.get(`${baseURL}/assets/-1/0/${JSON.stringify(filterRules)}/${JSON.stringify(sortRules)}/${search ? search : '_'}/${JSON.stringify(selectedTags)}`) ;
-                hideLoading();
-                
+       
                 setSelectedItems(()=>{
                     const newSelectedItems = res.data.result;
                     onSelectionChange(newSelectedItems);

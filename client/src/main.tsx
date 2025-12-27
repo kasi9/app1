@@ -6,7 +6,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { AppContextProvider } from './context/AppContext.tsx'
 import { UserProvider } from './context/UserContext.tsx'
 import { ToastContainer } from 'react-toastify'
-import { LoadingProvider } from './context/LoadingContext.tsx'
+import { LoadingProvider } from './context/LoadingProvider.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
