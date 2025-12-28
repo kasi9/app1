@@ -1,10 +1,11 @@
 
-import axios from "axios";
+
 import React, { useContext, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { AppContent } from "../context/AppContext";
 import { useUser } from "../context/UserContext";
+import { api } from "../context/api";
 
 interface Login { userName: string; password: string};
 
@@ -30,7 +31,7 @@ const Login = () => {
             }
         }
         
-        await axios.get(`${baseURL}/users/login/${login.userName}`).then(res => {   
+        await api.get(`${baseURL}/users/login/${login.userName}`).then(res => {   
             if (res.data.success) {       
                 localStorage.setItem('token', res.data.data.token);
                 setUserName(res.data.data.user.name);
