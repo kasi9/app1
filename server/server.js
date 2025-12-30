@@ -11,28 +11,26 @@ import personRouter from './routes/person.routes.js';
 import userRouter from './routes/user.routes.js';
 import privilegeRouter from './routes/privilege.routes.js';
 import utilRouter from './routes/utils.routes.js';
-import videoRouter from './routes/videos.Routes.js';
-import placeRouter from './routes/place.Routes.js';
-import audioRouter from './routes/audio.routes.js';
-import linkRouter from './routes/link.routes.js';
 import { fileURLToPath } from "url";
 import path from "path";
-import imageRouter from './routes/image.routes.js';
 import playListRouter from './routes/PlayList.routes.js';
 import assetRouter from './routes/asset.routes.js';
+import { getTags  } from './controllers/tag.controller.js';
+import logMiddleware from './utils/log.middleware.js'
 
 dotenv.config(); 
 
-mongoose.connect(process.env.DB_URL).then(()=>console.log('mongoDB connected successfully.'));;
+mongoose.connect(process.env.DB_URL, { dbName: process.env.DB_NAME }).then(()=>console.log('mongoDB connected successfullyxxxx.'));;
 
 const app = express();
 
 app.use(express.json());
-
-//app.use( cors({ origin: "https://app1cli.vercel.app", methods: ["GET","POST","PUT","DELETE","OPTIONS"], allowedHeaders: ["Content-Type", "Authorization"], credentials: true, }) );
 app.use( cors({ origin: process.env.CLIENT_URL, methods: ["GET","POST","PUT","DELETE","OPTIONS"], allowedHeaders: ["Content-Type", "Authorization"], credentials: true, }) );
 
+app.use(logMiddleware);
+
 app.get('/', (request, response)=>{ response.status(200).send('Welcome to Organization & Security module.'); });
+app.get('/tags', getTags);
 
 app.use('/objecttypes', objectTypeRouter);
 app.use('/organizations', organizationRouter);
@@ -41,12 +39,6 @@ app.use('/persons', personRouter);
 app.use('/roles', roleRoutes);
 app.use('/privilege', privilegeRouter);
 app.use('/audit', utilRouter);
-
-app.use('/video', videoRouter);
-app.use('/places', placeRouter);
-app.use('/audios', audioRouter);
-app.use('/links', linkRouter);
-app.use('/images', imageRouter);
 
 app.use('/assets', assetRouter);
 app.use('/playlists', playListRouter);
@@ -66,7 +58,7 @@ app.get("/downloads/:filename", (req, res) => {
 //  }
 
   res.download("https://storage.googleapis.com/kasip18_app1_bucket1/uploads/1766650226326-image4.jpeg", filename); // 👈 forces download
-});
 
+});
 
 app.listen(process.env.PORT || 5000, ()=>{ console.log('Server is running at port '+ process.env.PORT || 5000)});

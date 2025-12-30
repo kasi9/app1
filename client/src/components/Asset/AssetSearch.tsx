@@ -41,7 +41,7 @@ const AssetSearch = forwardRef<AssetSearchRef, AssetSearchProps> (({ onSelection
     const [ search, setSearch] = useState('');
     const [ filterRules, setFilterRules ] = useState<FilterRule[]>([]);
     const [ sortRules, setSortRules ] = useState<SortRule[]>([]);
-    const [ availableTags] = useState<string[]>(["kasi","radha","saketh"]);
+    const [ availableTags, setAvailableTags ] = useState<string[]>(["kasi","radha","saketh"]);
     const [ selectedTags, setSelectedTags] = useState<string[]>([]);
     const [ privileges, setPrivileges] = useState<Previleges> ({canViewOrEdit: false, titleViewOrEdit: "", canDelete: false, titleDelete: ""});
 
@@ -69,6 +69,9 @@ const AssetSearch = forwardRef<AssetSearchRef, AssetSearchProps> (({ onSelection
     const pageLoad = async () => {
         await getActions('asset') ;
         setPrivileges2(selectedItems);
+        const res2 = await api.get(`${baseURL}/tags`);
+        setAvailableTags(res2.data.data);
+
     }
 
     const setPrivileges2 = (items: Asset[]) => {
@@ -288,7 +291,8 @@ const AssetSearch = forwardRef<AssetSearchRef, AssetSearchProps> (({ onSelection
       {/* SEARCH BAR */}
       <div className="flex items-center gap-2 mb-3, ml-5">
         <input type="checkbox" onChange={handleSelectAllPages} ref={selectAllPagesRef} disabled = { assets?.length>0 ? false : true } />
-        <Autocomplete multiple freeSolo options={availableTags} value={selectedTags} onChange={(_, value) => setSelectedTags(value)} 
+        <Autocomplete multiple freeSolo options={availableTags ?? []} value={selectedTags ?? []} getOptionLabel={(option) => option }
+            onChange={(_, value) => setSelectedTags(value)} 
           renderInput={(params) => (<TextField {...params} label="Tags" size="small" />)} className="flex-1" />
         <input type="text" name="search" value={search} onChange={(e) => setSearch(e.target.value) } 
             onKeyUp ={(e) =>  e.key === "Enter" && handleSearch() } 

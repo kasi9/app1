@@ -18,21 +18,40 @@ export const userBulkInsert = async (request, response)=>{
 }
 
 export const getToken = async (req, res) => {
-    try{
-        const user = await User.findOne({ loginName: req.params.userName });
-        const person = await Person.findOne({ user: user._id});
+  try {
+    const  userName = req.params.userName;
 
-        const token = jwt.sign(
-            { id: user._id, loginName: user.loginName, userFullName: person.personName, tenantId: user.tenantId, organizationId: user.organizationId }, // payload
-            process.env.JWT_SECRET_KEY, 
-            { expiresIn: '1h' }
-        );
+/*    if (!userName || !password) {
+      return res.status(400).json({ success: false, message: "Username and password are required" });
+    }*/
 
-        return res.json({ success: true, message: 'Logged-In successfully.', data: { token, user: { id: user?._id, name: person.personName}}});       
-    } catch (error) {
-        return res.json({ success: false, message: error.message})
+    const user = await User.findOne({ loginName: userName });
+    if (!user) {
+      return res.status(200).json({ success: false, responseType: 'err', message: 'User not found.', data: null, errorCode: '', errors: [], requestId: '' });
     }
-}
+
+    // ⚠️ Replace with bcrypt compare
+/*    const isPasswordValid = await user.comparePassword(password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ success: false, message: "Invalid credentials" });
+    }*/
+
+    const person = await Person.findOne({ user: user._id });
+    const personName = person?.personName || user.loginName;
+
+    if (!process.env.JWT_SECRET_KEY) {
+      throw new Error("JWT_SECRET_KEY is not configured");
+    }
+
+    const token = jwt.sign({ id: user._id, loginName: user.loginName, userFullName: personName, tenantId: user.tenantId, organizationId: user.organizationId, },
+      process.env.JWT_SECRET_KEY, { expiresIn: "1h" }) ;
+
+    return res.json({ success: true, responseType: 'msg', message: "Logged in successfully", data: { token, user: { id: user._id, name: personName }, }, errorCode: '', errors: [], requestId: '', });
+  } catch (error) {
+    return res.status(500).json({ success: false, responseType: 'err', message: error.message, data: null, errorCode: '', errors: [], requestId: '', });
+  }
+};
+
 
 export const authorizeUser = (req, res, next) => {
 

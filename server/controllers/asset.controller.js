@@ -5,6 +5,7 @@ import { Storage } from "@google-cloud/storage";
 import dotenv from 'dotenv';
 
 import Asset from '../models/asset.model.js';
+import TagModel from '../models/tag.model.js';
 import Counter from "../models/counter.model.js";
 
 dotenv.config();
@@ -81,8 +82,8 @@ export const createAsset = async (request, response) => {
     const segments = parseJsonSafely(request.body.segments);
     const tags = parseJsonSafely(request.body.tags);
 
-const session = await mongoose.startSession();
-session.startTransaction();
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
     try {
         const data = { ...request.body, filePath: request.body.filePath ? request.body.filePath : request.file.filename  
@@ -95,26 +96,31 @@ session.startTransaction();
               , errorCode: '', errors: assetErrors, requestId: '' });
         };
 
-if (!data.code) {
-const counter = await Counter.findOneAndUpdate(
-  { name: "assetCode" },
-  { $inc: { seq: 1 } },
-  { new: true, upsert: true }
-);
-data.code = counter.seq;
-}
+        if (!data.code) {
+            const counter = await Counter.findOneAndUpdate( { name: "assetCode" }, { $inc: { seq: 1 } }, { new: true, upsert: true } );
+            data.code = counter.seq;
+        }
+
         const assetNew = await Asset.create(data);
-await session.commitTransaction();
+
+        for (const tag of data.tags) {
+            await TagModel.updateOne({ title: tag }, { $setOnInsert: { tenantId: data.tenantId, title: tag } }, { upsert: true });
+        }
+
+        await session.commitTransaction();
+
+        assetNew.filePath = assetNew.isUploaded ? process.env.FILE_STORAGE +"/"+ process.env.BUCKET_NAME +"/"+ assetNew.filePath : assetNew.filePath ;
         return response.status(200).json({ success: true, responseType: 'msg', message: 'Asset created successfully.', data: assetNew, errorCode: '', errors: [], requestId: '' });
     }
     catch (err){
-await session.abortTransaction();      
+        await session.abortTransaction();      
+
         return response.status(200).json({ success: false, responseType: 'err', message: 'Failed to create Asset', data: { data: request.body, user: request.user}
           , errorCode: '', errors: [err.message], requestId: '' });
 
     } 
     finally {
-session.endSession();
+        session.endSession();
     }    
 }
 
@@ -123,8 +129,17 @@ export const updateAsset = async (request, response) => {
     let assetUpdated;
 
     try {
+    const parseJsonSafely = (value, fallback = []) => {
+        try { return JSON.parse(value); }
+        catch { return fallback; }
+    };
 
-        const data = { ...request.body, tenantId: request.user?.tenantId, organizationId: request.user?.organizationId, modifiedByUserId: request.user?.id} ;
+        const segments = parseJsonSafely(request.body.segments);
+        const tags = parseJsonSafely(request.body.tags);
+
+        const data = { ...request.body, tenantId: request.user?.tenantId, organizationId: request.user?.organizationId, modifiedByUserId: request.user?.id
+          , segments: segments, tags: tags,
+        } ;
 
         const assetErrors = validateAsset(data)
         if (assetErrors.length>0) {
@@ -147,9 +162,16 @@ export const updateAsset = async (request, response) => {
         }
         else {
             assetUpdated = await Asset.findByIdAndUpdate(id, 
-                { $set: { assetType: data.assetType, code: data.code, title: data.title, description: data.description, modifiedByUserId: data.modifiedByUserId } }, 
+                { $set: { assetType: data.assetType, code: data.code, title: data.title, description: data.description, modifiedByUserId: data.modifiedByUserId
+                  , segments: data.segments, tags: data.tags,
+                 } }, 
                 {new: true});
         }
+
+        for (const tag of data.tags) {
+            await TagModel.updateOne({ title: tag }, { $setOnInsert: { tenantId: data.tenantId, title: tag } }, { upsert: true });
+        }
+
 
         response.json({ success: true, responseType: 'msg', message: 'Asset updated successfully.', data: assetUpdated, errorCode: '', errors: [], requestId: '' });
 

@@ -4,7 +4,7 @@
   "description": "Organization setup and Security model",
   "main": "server.js",
   "scripts": {
-    "srv": "node server.js" 
+    "srv": "nodemon server" 
   },
   "type": "module",
   "author": "Kasi Viswanatha Raju Penmatsa",

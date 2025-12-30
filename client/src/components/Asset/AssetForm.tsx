@@ -71,6 +71,8 @@ const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, r
         codeRef.current?.focus();
 
         getActions('asset')
+        const res2 = await api.get(`${baseURL}/tags`, { hideMessage: true} as CustomAxiosConfig);
+        setAvailableTags(res2.data.data);
 
         if (id) 
             getData();
@@ -142,6 +144,7 @@ const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, r
             assetViewerRef.current?.viewOrPlay();
 
         }
+
     }
 
     const saveAsset = async () => {
@@ -217,6 +220,7 @@ const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, r
         });
 
         setAssets(()=>[]);
+        clearForm();
         return null;
     }
 
@@ -258,6 +262,11 @@ const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, r
         if (file) {
             const fileNameWithoutExt = file?.name.replace(/\.[^/.]+$/, ""); 
             const idx = fileTypes.findIndex(ft => ft.mime === file?.type);
+            if (idx === -1) {
+                setAsset((prev)=>{ return {...prev, assetType: "" }});
+                toast.error("Invalid file selected.", {autoClose: false});
+                return ;
+            }
             setSelectedFileTypeIndex(idx);
             const fileTypeName = fileTypes[idx].name;
             const fileTypeId = fileTypes[idx].id;
@@ -265,7 +274,9 @@ const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, r
             const url = await URL.createObjectURL(file);
             setPreviewUrl(url);
 
-            setAsset({...asset, assetType: fileTypeName, code: "", title: fileNameWithoutExt, uploadedFile: file, segments: [], isUploaded: true});
+            setAsset({...asset, assetType: fileTypeName, code: !asset.code ? "" : asset.code, title: !asset.title ? fileNameWithoutExt : asset.title
+                , uploadedFile: file, segments: [], isUploaded: true});
+                
             setPreviewAssets([{ _id: "", id: "", assetType: fileTypeId, code: "", title: "", description: "", filePath: url, isPreview: true, isUploaded: true}]);
             assetViewerRef.current?.viewOrPlay();
         } else {
@@ -467,26 +478,21 @@ const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, r
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-          <label className="sm:w-1/4 font-medium">Tags</label>
-          <Autocomplete multiple freeSolo options={availableTags} value={asset?.tags} onChange={(_, value) => handleTagSelection(value)}
-            className="w-full sm:w-3/4" 
+          <label className="sm:w-1/8 font-medium">Tags</label>
+          <Autocomplete multiple freeSolo options={availableTags ?? []} value={asset?.tags || []} getOptionLabel={(option) => option }
+            onChange={(_, value) => handleTagSelection(value)}
+            className="w-full sm:w-7/8" 
             renderInput={(params) => <TextField {...params} variant="outlined" size="small" className="w-full" 
-              InputProps={{ ...params.InputProps, className: "border rounded p-2" }}/>}            
+              InputProps={{ ...params.InputProps, className: "border rounded p-2 flex-wrap" }}/>}            
           />
         </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
             <label className="sm:w-1/4 font-medium">Type</label>
            <input name="assetType" value={asset?.assetType} onChange={handleChange} className="w-full sm:w-3/4 border rounded p-2" disabled />
-{/*        <select name="assetType" value={asset?.assetType} onChange={(e) => handleChange} className="w-full sm:w-3/4 border rounded p-2" >
-            <option value="">-- Select --</option>
-            {fileTypes.map(opt => (
-                <option key={opt.name} value={opt.name}>{opt.name}</option>
-            ))}
-        </select>*/}
         </div>
 
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
