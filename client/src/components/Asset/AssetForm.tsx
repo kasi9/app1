@@ -1,39 +1,43 @@
-import React, { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from "react";
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import axios from "axios";
-import { useLocation } from "react-router-dom";
+//import { useLocation } from "react-router-dom";
 
-import { AppContent } from "../../context/AppContext";
-import type { Asset } from "../../types/asset.type";
-import { useUser } from "../../context/UserContext";
+import type { Asset } from "../../types/Asset.type";
 import AssetViewer, { type AssetViewerRef } from "./AssetViewer";
 import { toast } from "react-toastify";
 import { api, type CustomAxiosConfig } from "../../context/api";
 import { Autocomplete, TextField } from "@mui/material";
+import { useAppContext } from "../../context/AppContext";
+import { useUserContext } from "../../context/UserContext";
+import { FILE_TYPES, MAX_UPLOAD_MB } from "../../config/config";
 
 const emptyAsset: Asset = { assetType: "", code: "", title: "", description: "", segments: [], tags: [], isUploaded: false };  
 interface Segment { start: number; end: number | null; }
-export interface Previleges { canCreateOrEdit: boolean; titleCreateOrEdit: string; canDelete: boolean; titleDelete: string; canBulkCreate: boolean; titleBulkCreate: string; };
+export interface Previleges { canCreateOrEdit: boolean; createOrEditTooltip: string; canDelete: boolean; deleteTooltip: string; 
+    canBulkCreate: boolean; bulkCreateTooltip: string; };
 
 export interface AssetFormRef { 
-    save: () => void;
-    saveBulk: () => void;
-    delete: () => void;
+    save: () => Promise<Asset | null>;
+    saveBulk: () => Promise<boolean>;
+    delete: () => Promise<boolean>;
     clear: () => void;
     focusToCode: () => void;
+    playListId?: () => string | undefined;
 }
 
 interface AssetFormProps {
-    onSave: (asset: Asset) => void;
+    onSave?: (asset: Asset) => void;
     onLoad: (priv: Previleges ) => void;
+    assetId?: string;
 }
 
-const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, ref) => {
+const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad, assetId}, ref) => {
 
-    const { baseURL, fileTypes } = useContext(AppContent)!;
-    const { getActions, actions } = useUser();
-    const location = useLocation();
-    const { id } = location.state || {}; 
-
+    const { baseURL } = useAppContext();
+    const { getActions, actions } = useUserContext();
+//    const location = useLocation();
+//    const { _id } = location.state || {}; 
+    const _id = assetId;
     const codeRef = useRef<HTMLInputElement>(null);
     const fileUploadRef = useRef<HTMLInputElement >(null);
     const urlRef = useRef<HTMLInputElement>(null);
@@ -44,28 +48,52 @@ const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, r
     const [selectedFileTypeIndex, setSelectedFileTypeIndex] = useState<number|null>(null);
     const [currentIndex, setCurrentIndex] = useState<number | null>(null);
     const [availableTags, setAvailableTags] = useState<string[]>([]);
-    const [ privileges, ] = useState<Previleges> ({canCreateOrEdit: false, titleCreateOrEdit: "", canDelete: false, titleDelete: "", canBulkCreate: false, titleBulkCreate: ""});
+    const [ privileges, ] = useState<Previleges> ({canCreateOrEdit: false, createOrEditTooltip: "", canDelete: false, deleteTooltip: ""
+        , canBulkCreate: false, bulkCreateTooltip: ""});
 
     const [url, setUrl] = useState<string>("");
     const [previewUrl, setPreviewUrl] = useState<string>("");
     const [previewAssets, setPreviewAssets] = useState<Asset[]>([]);
 
     useImperativeHandle(ref, () => ({
-
-        save: async () => saveAsset(),
-        saveBulk: () => saveAssetsBulk(),
-        delete: () => api.delete(`${baseURL}/assets/${asset._id}`) ,
+        save: saveAsset,
+        saveBulk: saveAssetsBulk,
+        delete: deleteAsset,
         clear: () => { clearForm(); },
         focusToCode: () => { codeRef.current?.focus(); },
-        playListId: () => { return id },
-
+        playListId: () => { return _id },
     }));
+
+    const deleteAsset = async () => {
+        if (!window.confirm('Are you sure you want to delete this asset?')) {
+            return false;
+        }
+
+        if (!asset._id) return false;
+
+        try{
+            await api.delete(`${baseURL}/assets/${asset._id}`);
+            clearForm();
+            return true;
+        }
+        catch {
+            toast.error("Delete failed.")
+            return false;
+        }
+    };
+
 
     useEffect(() => {    
 
         pageLoad();
 
     }, []);
+
+    useEffect(() => {
+        return () => {
+            if (previewUrl) URL.revokeObjectURL(previewUrl);
+        };
+    }, [previewUrl]);
 
     const pageLoad = async () => {
         codeRef.current?.focus();
@@ -74,7 +102,7 @@ const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, r
         const res2 = await api.get(`${baseURL}/tags`, { hideMessage: true} as CustomAxiosConfig);
         setAvailableTags(res2.data.data);
 
-        if (id) 
+        if (_id) 
             getData();
 
 
@@ -83,11 +111,11 @@ const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, r
 
     const setPrivileges2 = () => {
 
-        const privs = privileges ;
+        const privs = { ...privileges } ;
 
         if (!actions.includes('Create') && !actions.includes('Update') ) {
             privs.canCreateOrEdit = false;
-            privs.titleCreateOrEdit = "No permission"
+            privs.createOrEditTooltip = "No permission"
         }
 /*        else if (!id) {
             privs.canViewOrEdit = false;
@@ -95,29 +123,29 @@ const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, r
         }*/
         else {
             privs.canCreateOrEdit = true;
-            privs.titleCreateOrEdit = "";
+            privs.createOrEditTooltip = "";
         }
 
         if (!actions.includes('Delete')) {
             privs.canDelete = false;
-            privs.titleDelete = "No permission"
+            privs.deleteTooltip = "No permission"
         }
-        else if (!id) {
+        else if (!_id) {
             privs.canDelete = false;
-            privs.titleDelete = "No selection";
+            privs.deleteTooltip = "No selection";
         }
         else {
             privs.canDelete = true;
-            privs.titleDelete = "";
+            privs.deleteTooltip = "";
         }
 
         if (!actions.includes('BulkCreate')) {
             privs.canBulkCreate = false;
-            privs.titleBulkCreate = "No permission"
+            privs.bulkCreateTooltip = "No permission"
         }
         else {
             privs.canBulkCreate = true;
-            privs.titleBulkCreate = "";
+            privs.bulkCreateTooltip = "";
         }
 
         onLoad(privs);
@@ -131,29 +159,35 @@ const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, r
 
     const getData = async () => {
 
-        const res = await api.get(`${baseURL}/assets/${id}`, { hideMessage: true} as CustomAxiosConfig);
+        const res = await api.get(`${baseURL}/assets/${_id}`, { hideMessage: true} as CustomAxiosConfig);
             
         if (res.data.data) {
             
-            const idx = fileTypes.findIndex(ft=>ft.id == res.data.data.assetType);
+            const idx = FILE_TYPES.findIndex(ft=>ft.id == res.data.data.assetType);
             setSelectedFileTypeIndex(idx);
-            res.data.data.assetType = fileTypes[idx].name;
+            res.data.data.assetType = FILE_TYPES[idx].name;
             setAsset(res.data.data);   
-            setPreviewAssets([...previewAssets,{ _id: "", id: "", assetType: fileTypes[idx].id, code: "", title: "", description: ""
+            setPreviewAssets([...previewAssets,{ _id: "", assetType: FILE_TYPES[idx].id, code: "", title: "", description: ""
                 , filePath: res.data.data.filePath, lat: res.data.data.lat, lng: res.data.data.lng, segments: res.data.data.segments, isUploaded: res.data.data.isUploaded }]);
             assetViewerRef.current?.viewOrPlay();
-
         }
-
     }
 
     const saveAsset = async () => {
-        
+        if (!asset.assetType) {
+             toast.error("Asset type is required");
+             return null;
+        }
+        if (!asset.title?.trim()) {
+            toast.error("Title is required");
+            return null;
+        }
+
         const formData = new FormData();
 
         if (selectedFileTypeIndex !== null) {
-            formData.append("assetType", fileTypes[selectedFileTypeIndex]?.id);
-            if (["video", "youTube", "audio", "image", "pdf", "webLink"].includes(fileTypes[selectedFileTypeIndex]?.id)) 
+            formData.append("assetType", FILE_TYPES[selectedFileTypeIndex]?.id);
+            if (["video", "youTube", "audio", "image", "pdf", "webLink"].includes(FILE_TYPES[selectedFileTypeIndex]?.id)) 
                 formData.append("filePath", asset.filePath ?? "");
         }
         formData.append("code", asset.code);
@@ -161,7 +195,7 @@ const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, r
         formData.append('description', asset.description);
         formData.append('isUploaded', String(asset.isUploaded));
         if (asset.uploadedFile) 
-            formData.append("audio", asset.uploadedFile);
+            formData.append("file", asset.uploadedFile);
         if (asset.assetType === "gmap") {
             formData.append("lat", String(asset.lat));
             formData.append("lng", String(asset.lng));
@@ -174,55 +208,62 @@ const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, r
         if ((asset?.tags?.length ?? 0) > 0)
             formData.append("tags", JSON.stringify(asset.tags));
 
-        if (id){
-            const res = await api.put(`${baseURL}/assets/${id}`, formData);
-            onSave(res.data.data); 
+        if (_id){
+            const res = await api.put(`${baseURL}/assets/${_id}`, formData);
+            onSave?.(res.data.data); 
         }
         else {
             
-            const res = await api.post(`${baseURL}/assets`, formData) ;       
-            if (res.data.success)
-                clearForm();
+            try {
+                const res = await api.post(`${baseURL}/assets`, formData) ;       
+                if (res.data.success)
+                    clearForm();
 
-            onSave(res.data.data); 
+                onSave?.(res.data.data); 
+            }
+            catch {
+                toast.error("Failed to save asset");
+                return null;
+            }
         }
 
-        return { _id: id || "", id: "", assetType: asset.assetType, code: asset.code, title: asset.title, description: asset.description
+        return { _id: _id || "", id: "", assetType: asset.assetType, code: asset.code, title: asset.title, description: asset.description
             , filePath: previewUrl, isUploaded: false };
 
     }
 
-    const saveAssetsBulk = () => {
+    const saveAssetsBulk = async (): Promise<boolean> => {
+        try {
+            await Promise.all(
+                assets.map(async (asset) => {
+                    const formData = new FormData();
+                    formData.append("assetType", asset.assetType);
+                    formData.append("code", "");
+                    formData.append("title", asset.title);
+                    formData.append("description", asset.description);
+                    formData.append("isUploaded", String(asset.isUploaded));
 
-        assets.map((asset, i)=>{
-            const formData = new FormData();
-            formData.append("assetType", asset.assetType);
-            formData.append("code", "");
-            formData.append("title", asset.title);
-            formData.append('description', asset.description);
-            formData.append("isUploaded", String(asset.isUploaded));
-            if (asset.uploadedFile) 
-                formData.append("audio", asset.uploadedFile);
+                    if (asset.uploadedFile)
+                        formData.append("file", asset.uploadedFile);
 
-            try {
-                api.post(`${baseURL}/assets`, formData, { hideMessage: true } as CustomAxiosConfig)
-            }
-            catch (err: unknown) {
-                if (axios.isAxiosError(err)) {
-                    toast.error(err.response?.data?.message ?? "Something went wrong", { autoClose: false });
-                } else {
-                    toast.error("Unexpected error", { autoClose: false });
-                }
-            }
-            finally {
-                console.log('bulk save: ', i, asset);
-            }
-        });
+                    await api.post(`${baseURL}/assets`, formData, { hideMessage: true } as CustomAxiosConfig);
+                })
+            );
 
-        setAssets(()=>[]);
-        clearForm();
-        return null;
-    }
+            toast.success("Bulk save completed");
+            setAssets([]);
+            clearForm();
+            return true;
+
+        } catch (err) {
+            if (axios.isAxiosError(err)) {
+                toast.error(err.response?.data?.message ?? "Bulk upload failed");
+            } else {
+                toast.error("Unexpected error");
+            }
+            return false;
+        }
+    };
 
     const clearForm = () => {
         setAsset(emptyAsset);
@@ -234,11 +275,11 @@ const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, r
     }
 
     const prepareBulkInsert = (files: File[] | null) => {
-        files?.map((file)=>{
+        files?.forEach((file)=>{
             const fileNameWithoutExt = file.name.replace(/\.[^/.]+$/, ""); 
-            const idx = fileTypes.findIndex(ft => ft.mime === file?.type);
+            const idx = FILE_TYPES.findIndex(ft => ft.mime === file?.type);
             if (idx !== -1) {
-                const fileTypeId = fileTypes[idx]?.id;
+                const fileTypeId = FILE_TYPES[idx]?.id;
                 if (fileTypeId){  
                     setAssets(prev=>[...prev, { _id: "", id: "", assetType: fileTypeId, code: "", title: fileNameWithoutExt, description: ""
                     , uploadedFile: file, isUploaded: true}]);
@@ -259,26 +300,41 @@ const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, r
         }
 
         const file = files?.[0];
+        if (file.size / 1024 / 1024 > MAX_UPLOAD_MB) {
+            toast.error(`File exceeds ${MAX_UPLOAD_MB}MB limit`);
+            return;
+        }
+
         if (file) {
             const fileNameWithoutExt = file?.name.replace(/\.[^/.]+$/, ""); 
-            const idx = fileTypes.findIndex(ft => ft.mime === file?.type);
+            const idx = FILE_TYPES.findIndex(ft => ft.mime === file?.type);
             if (idx === -1) {
                 setAsset((prev)=>{ return {...prev, assetType: "" }});
                 toast.error("Invalid file selected.", {autoClose: false});
                 return ;
             }
             setSelectedFileTypeIndex(idx);
-            const fileTypeName = fileTypes[idx].name;
-            const fileTypeId = fileTypes[idx].id;
+            const fileTypeName = FILE_TYPES[idx].name;
+            const fileTypeId = FILE_TYPES[idx].id;
 
             const url = await URL.createObjectURL(file);
             setPreviewUrl(url);
 
-            setAsset({...asset, assetType: fileTypeName, code: !asset.code ? "" : asset.code, title: !asset.title ? fileNameWithoutExt : asset.title
+            await setAsset({...asset, assetType: fileTypeName, code: !asset.code ? "" : asset.code, title: !asset.title ? fileNameWithoutExt : asset.title
                 , uploadedFile: file, segments: [], isUploaded: true});
                 
-            setPreviewAssets([{ _id: "", id: "", assetType: fileTypeId, code: "", title: "", description: "", filePath: url, isPreview: true, isUploaded: true}]);
+            await setPreviewAssets([{ _id: "", assetType: fileTypeId, code: "", title: "", description: "", filePath: url, isPreview: true, isUploaded: true}]);
+
+            if (file.type === "text/plain"){
+                setPreviewAssets([{ _id: "", assetType: fileTypeId, code: "", title: "", description: "", filePath: url, isPreview: true
+                    , isUploaded: true, file: file}]);
+            }
+            if (file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"){
+                setPreviewAssets([{ _id: "", assetType: fileTypeId, code: "", title: "", description: "", filePath: url, isPreview: true
+                    , isUploaded: true, file: file}]);
+            }
             assetViewerRef.current?.viewOrPlay();
+
         } else {
             setPreviewAssets([]);
             setPreviewUrl("");
@@ -295,7 +351,7 @@ const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, r
         setUrl(()=>url);
 
         const linkType = detectUrlType(url);
-        const idx = fileTypes.findIndex(ft => ft.mime === linkType);
+        const idx = FILE_TYPES.findIndex(ft => ft.mime === linkType);
         setSelectedFileTypeIndex(idx);
 
         if (linkType==="youTube") {
@@ -303,19 +359,20 @@ const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, r
         
             if (id) {
                 setAsset({ ...asset, assetType: 'youTube', filePath: id, segments:[], isUploaded: false })
-                setPreviewAssets([{ _id: "", id: "", assetType: 'youTube', code: "", title: "", description: "", filePath: id, isUploaded: false }]);
+                setPreviewAssets([{ _id: "", assetType: 'youTube', code: "", title: "", description: "", filePath: id, isUploaded: false }]);
             }
         }
 
         if (linkType==="gmap") {
             const { lat, lng } = extractLatLng(url) ?? {};
             setAsset({...asset, assetType: 'gmap', lat: lat, lng: lng, segments: []})  ;
-            setPreviewAssets([{ _id: "", id: "", assetType: "gmap", code: "", title: "", description: "", filePath: "", isPreview: true, lat: lat, lng: lng, isUploaded: false}]);
+            setPreviewAssets([{ _id: "", assetType: "gmap", code: "", title: "", description: "", filePath: "", isPreview: true
+                , lat: lat, lng: lng, isUploaded: false}]);
         }
 
         if (linkType === "webLink") {
             setAsset({...asset, assetType: linkType, filePath: url, segments:[]})  ;
-            setPreviewAssets([{ _id: "", id: "", assetType: "webLink", code: "", title: "", description: "", filePath: url, isUploaded: false}]);
+            setPreviewAssets([{ _id: "", assetType: "webLink", code: "", title: "", description: "", filePath: url, isUploaded: false}]);
         }            
 
         assetViewerRef.current?.viewOrPlay();
@@ -371,7 +428,8 @@ const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, r
     };
 
     const handleMarkEnd = () => { 
-        setAsset(prev => ({ ...prev, segments: prev.segments?.map((seg, i) => i === currentIndex ? { ...seg, end: assetViewerRef.current?.getCurrentTime() ?? null } : seg ), }));
+        setAsset(prev => ({ ...prev, segments: prev.segments?.map((seg, i) => i === currentIndex ? 
+            { ...seg, end: assetViewerRef.current?.getCurrentTime() ?? null } : seg ), }));
     };
 
     const handleClearMark = () => { setAsset({...asset, segments: []}) }
@@ -446,20 +504,23 @@ const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, r
 
         {/* PREVIEW */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-          <AssetViewer src={previewAssets} ref={assetViewerRef} />
+          <AssetViewer assets={previewAssets} ref={assetViewerRef} />
         </div>
 
         {/* CONTROLS */}
         <div className="border rounded p-3 space-y-3" >
 
           <div className="flex flex-wrap gap-2">
-            <button onClick={handleMarkStart} disabled = { !([0,1,5]).includes(selectedFileTypeIndex ?? 0) } 
-                className = { ([0,1,5]).includes(selectedFileTypeIndex ?? 0) ? "btn bg-green-500 text-white btn" : "btn bg-green-500 text-white btnDisabled" } >Mark Start</button>
-            <button onClick={handleMarkEnd} disabled = { !([0,1,5]).includes(selectedFileTypeIndex ?? 0) } 
-            className = { ([0,1,5]).includes(selectedFileTypeIndex ?? 0) ? "btn bg-red-500 text-white btn" : "btn bg-red-500 text-white btnDisabled" }>Mark End</button>
-            <button onClick={handleClearMark} disabled = { !([0,1,5]).includes(selectedFileTypeIndex ?? 0) } 
+            <button onClick={handleMarkStart} disabled = { !([0,1,2]).includes(selectedFileTypeIndex ?? 0) } 
+                className = { ([0,1,5]).includes(selectedFileTypeIndex ?? 0) ? "btn bg-green-500 text-white btn" : "btn bg-green-500 text-white btnDisabled" } >
+                Mark Start
+            </button>
+            <button onClick={handleMarkEnd} disabled = { !([0,1,2]).includes(selectedFileTypeIndex ?? 0) } 
+            className = { ([0,1,5]).includes(selectedFileTypeIndex ?? 0) ? "btn bg-red-500 text-white btn" : "btn bg-red-500 text-white btnDisabled" }>
+                Mark End</button>
+            <button onClick={handleClearMark} disabled = { !([0,1,2]).includes(selectedFileTypeIndex ?? 0) } 
             className = { ([0,1,5]).includes(selectedFileTypeIndex ?? 0) ? "btn bg-gray-500 text-white btn" : "btn bg-gray-500 text-white btnDisabled" }>Clear</button>
-            <button onClick={handlePlaySegments} disabled = { !([0,1,5]).includes(selectedFileTypeIndex ?? 0) } 
+            <button onClick={handlePlaySegments} disabled = { !([0,1,2]).includes(selectedFileTypeIndex ?? 0) } 
             className = { ([0,1,5]).includes(selectedFileTypeIndex ?? 0) ? "btn text-blue-600 btn" : "btn text-blue-600 btnDisabled" }>▶ Play All</button>
           </div>
 
@@ -511,12 +572,13 @@ const AssetForm = forwardRef<AssetFormRef, AssetFormProps> (({onSave, onLoad}, r
         <label className="sm:w-1/8 font-medium">Description</label>
         <textarea name="description" value={asset?.description} onChange={handleChange} rows={4} className="w-full sm:w-7/8 border rounded p-2" />
       </div>
-
     </div>
 </div>
-
+           
         </>
     )
 });
 
 export default AssetForm;
+
+

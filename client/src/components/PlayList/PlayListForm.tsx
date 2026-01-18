@@ -1,16 +1,18 @@
 
-import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import type { PlayList } from "../../types/PlayList.type";
-import { AppContent } from "../../context/AppContext";
-import type { Asset } from "../../types/asset.type";
+
+import type { Asset } from "../../types/Asset.type";
 import type { AssetViewerRef } from "../Asset/AssetViewer";
 import AssetViewer from "../Asset/AssetViewer";
 import { api, type CustomAxiosConfig } from "../../context/api";
-
-import { useUser } from "../../context/UserContext";
-
+import { useAppContext } from "../../context/AppContext";
+import { useUserContext } from "../../context/UserContext";
+import { toast } from "react-toastify";
+import AssetSearch2 from "../Asset/AssetSearch2";
+import type { AssetSearchRef } from "../Asset/AssetSearch2";
 
 export interface PlayListFormRef { 
     save: () => void;
@@ -23,24 +25,26 @@ export interface PlayListFormRef {
 }
 
 interface PlayListFormProps {
-    onLoad: (hasSelected: boolean) => void;
-        onLoad2: (priv: Previleges ) => void;
+    onLoad?: (hasSelected: boolean) => void;
+    onLoad2: (priv: Previleges ) => void;
 }
 
-const emptyAsset = { id: "", code: "", title: "", description: "", assets: []} ;
+const emptyPlaylist: PlayList = { _id: "", code: "", title: "", description: "", assets: [] };
+
 export interface Previleges { canCreateOrEdit: boolean; titleCreateOrEdit: string; canDelete: boolean; titleDelete: string; };
 
 const PlayListForm = forwardRef<PlayListFormRef, PlayListFormProps> (({ onLoad, onLoad2 }, ref) => {
 
     const location = useLocation();
-    const { id } = location.state || {}; 
-    const { baseURL } = useContext(AppContent)!;
-    const { actions, getActions } = useUser();
+    const { _id } = location.state || {}; 
+    const { baseURL } = useAppContext();
+    const { actions, getActions } = useUserContext();
 
     const codeRef = useRef<HTMLInputElement>(null);
     const assetViewerRef = useRef<AssetViewerRef>(null);
+    const assetSearchRef = useRef<AssetSearchRef>(null);
 
-    const [playList, setPlayList] = useState<PlayList>({ id: "", code: "", title: "", description: "", assets: []});
+    const [playList, setPlayList] = useState<PlayList>({ _id: "", code: "", title: "", description: "", assets: []});
     const [assetFiles, setAssetFiles] = useState<Asset[]>([]);
     const [updatedItems, setUpdatedItems] = useState<Asset[]>([]);
     const [viewerItems, setViewerItems] = useState<Asset[]>([]);
@@ -53,12 +57,12 @@ const PlayListForm = forwardRef<PlayListFormRef, PlayListFormProps> (({ onLoad, 
     const pageLoad = async () => {
         clear();
 
-        if (id) {
-            onLoad(true);
-            getData();
+        if (_id) {
+            onLoad?.(true);
+            await getData();
         }
         else
-            onLoad(false);
+            onLoad?.(false);
         
         await getActions('playList') ;
         setPrivileges2();
@@ -66,16 +70,16 @@ const PlayListForm = forwardRef<PlayListFormRef, PlayListFormProps> (({ onLoad, 
 
     const setPrivileges2 = () => {
 
-        const privs = privileges ;
+        const privs = { ...privileges } ;
 
         if (!actions.includes('Create') && !actions.includes('Update') ) {
             privs.canCreateOrEdit = false;
             privs.titleCreateOrEdit = "No permission"
         }
-/*        else if (!id) {
-            privs.canViewOrEdit = false;
-            privs.titleViewOrEdit = "No selection";
-        }*/
+                    /*        else if (!id) {
+                                privs.canViewOrEdit = false;
+                                privs.titleViewOrEdit = "No selection";
+                            }*/
         else {
             privs.canCreateOrEdit = true;
             privs.titleCreateOrEdit = "";
@@ -85,7 +89,7 @@ const PlayListForm = forwardRef<PlayListFormRef, PlayListFormProps> (({ onLoad, 
             privs.canDelete = false;
             privs.titleDelete = "No permission"
         }
-        else if (!id) {
+        else if (!_id) {
             privs.canDelete = false;
             privs.titleDelete = "No selection";
         }
@@ -103,83 +107,97 @@ const PlayListForm = forwardRef<PlayListFormRef, PlayListFormProps> (({ onLoad, 
     } ;
 
     const handleItemDelete = (idx: number) => {
-        const deletedItem = assetFiles[idx];
-        deletedItem.updateType = "del";
-        setUpdatedItems([...updatedItems, deletedItem]);
+
+        const deletedItem = { ...assetFiles[idx], updateType: "del" };
+
+        setUpdatedItems(prev => [...prev, deletedItem]);
         setAssetFiles(prev => prev.filter((_, i) => i !== idx));
         setViewerItems(prev => prev.filter((_, i) => i !== idx));
-    }
+    };
 
-    const handlePlay = (asset: Asset) => {
+    const handlePlay = useCallback((asset: Asset) => {
         setViewerItems(() => {
             const assets = [asset];
             return assets;
         });
         assetViewerRef.current?.viewOrPlay();
-    }
+    },[]);
 
     const handleViewerPrePlay = () => {
-        console.log(assetFiles);
         setViewerItems(()=>{ const assets = assetFiles; return assets});
         assetViewerRef.current?.viewOrPlay();
     }
 
     const getData = async () => {
 
-        const res = await api.get(`${baseURL}/playlists/${id}`, { hideMessage: true } as CustomAxiosConfig);
-        
-        setPlayList(res.data.data);   
-        setAssetFiles(res.data.data.assets);
-        setViewerItems(res.data.data.assets);
-        assetViewerRef.current?.viewOrPlay();                 
+        try {
+            const res = await api.get(`${baseURL}/playlists/${_id}`, { hideMessage: true } as CustomAxiosConfig);
+            
+            setPlayList(res.data.data);   
+            setAssetFiles(res.data.data.assets);
+            setViewerItems(res.data.data.assets);
+            assetViewerRef.current?.viewOrPlay();    
+        }
+        catch {
+            toast.error("Play List fetching failed.");
+        }             
     }
 
     const clear = () => {
-        setPlayList(emptyAsset);
+        setPlayList(emptyPlaylist);
         codeRef.current?.focus();
         setAssetFiles([]);
         setViewerItems([]);
     }
 
     const addItem = (asset: Asset) => {
+        if (assetFiles.some(a => a._id === asset._id)) {
+            toast.warn("This Asset already added.");
+            return 
+        };
 
-        asset.updateType = "add";
+        const updated = { ...asset, updateType: "add" };
 
-        setUpdatedItems(prev => {
-            const items = [...prev, asset];
-            return items;
-        });
-
-        setAssetFiles(prev => {
-            const items = [...prev, asset];
-            return items;
-        });
-
-        setViewerItems(prev => {
-            const items = [...prev, asset];
-            return items;
-        });
+        setUpdatedItems(prev => [...prev, updated]);
+        setAssetFiles(prev => [...prev, updated]);
+        setViewerItems(prev => [...prev, updated]);
     }
 
     const savePlayList = async () => {
 
-        if (playList.id === "") {
+        if (!playList.title?.trim()) {
+            toast.error("Title is required");
+            codeRef.current?.focus();
+            return false;
+        }
+
+        if (playList._id === "") {
             const payload = { ...playList, assets: assetFiles };                
             const res2 = await api.post(`${baseURL}/playlists`, payload);
             if (res2.data.success) {
                 clear();
                 codeRef.current?.focus();
+                return true;
             }
+            else
+                return false;
         }
         else {
             const payload = { ...playList, assets: updatedItems };
             api.put(`${baseURL}/playlists/${playList._id}`, payload) ;
+            return true;
         }
     }
 
-    const deletePlayList = () => { 
-
-        api.delete(`${baseURL}/playlists/${playList._id}`);
+    const deletePlayList = async () => { 
+        try {
+            await api.delete(`${baseURL}/playlists/${playList._id}`);   
+            return true;
+        }
+        catch {
+            toast.error("Play List delete failed.");
+            return false;
+        }
     }    
 
     useImperativeHandle(ref, () => ({
@@ -187,7 +205,7 @@ const PlayListForm = forwardRef<PlayListFormRef, PlayListFormProps> (({ onLoad, 
         save: () => savePlayList(),
         delete: () => deletePlayList(),      
         clear: () => clear(), 
-        playListId: () => { return id },
+        playListId: () => { return _id },
         getPlayList: () => { return playList },  
         getAssets: () => { return assetFiles },
         addAsset: (asset: Asset) => addItem(asset),
@@ -201,7 +219,7 @@ const PlayListForm = forwardRef<PlayListFormRef, PlayListFormProps> (({ onLoad, 
 
   {/* LEFT – ASSET VIEWER */}
   <div className="lg:w-1/2 w-full h-[350px] border rounded-lg p-2">
-    <AssetViewer src={viewerItems} ref={assetViewerRef} onPrePlay={handleViewerPrePlay} />
+    <AssetViewer assets={viewerItems} ref={assetViewerRef} onPrePlay={handleViewerPrePlay} />
   </div>
 
   {/* RIGHT – FORM */}
@@ -227,6 +245,9 @@ const PlayListForm = forwardRef<PlayListFormRef, PlayListFormProps> (({ onLoad, 
 
   </div>
 </div>
+
+<div><AssetSearch2 assets={ assetFiles } onDelete={(e)=>handleItemDelete(e)} onPlay={(e) => handlePlay(e)} onSelectionChange={()=>{}} ref = {assetSearchRef} onLoad={ ()=>{}  }></AssetSearch2></div>
+{/*
 <div className="overflow-x-auto">
   <table className="min-w-full border border-gray-300 rounded">
 
@@ -257,7 +278,7 @@ const PlayListForm = forwardRef<PlayListFormRef, PlayListFormProps> (({ onLoad, 
     </tbody>
 
   </table>
-</div>
+</div>*/}
 
 </div>
         </>

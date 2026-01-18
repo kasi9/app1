@@ -16,10 +16,10 @@ const AssetSearchPage = () => {
     const assetSearchRef = useRef<AssetSearchRef>(null);
 
     const handleEdit = () => {
-        const selectedItem = assetSearchRef.current?.selectedItems()[0];
+        const selectedItem = assetSearchRef.current?.selectedItems()?.[0];
     
         if (selectedItem)
-            navigate('/asset', {state: { id: selectedItem?._id }});
+            navigate('/asset', {state: { _id: selectedItem?._id }});
         else
             toast.warn("Asset should be selected to edit");
     }
@@ -30,12 +30,10 @@ const AssetSearchPage = () => {
     }
 
     const handleOnLoad = (priv: Previleges) => {
-        setTimeout(() => {
-            setCanViewOrEdit(priv.canViewOrEdit);
-            setTitleViewOrEdit(priv.titleViewOrEdit);
-            setCanDelete(priv.canDelete);
-            setTitleDelete(priv.titleDelete);        
-        }, 0);
+        setCanViewOrEdit(priv.canViewOrEdit);
+        setTitleViewOrEdit(priv.titleViewOrEdit);
+        setCanDelete(priv.canDelete);
+        setTitleDelete(priv.titleDelete);        
     }
 
     return (
@@ -46,8 +44,8 @@ const AssetSearchPage = () => {
         <h2 className="flex-none text-xl font-semibold text-center">Assets List</h2>
         <div className="flex-1 flex justify-end gap-2">
             <Link to="/asset" className="link">New</Link>
-            <button onClick={handleEdit} disabled={!canViewOrEdit} title={titleViewOrEdit} className={canViewOrEdit ? "btn" : "btnDisabled"} > View/Edit </button>
-            <button onClick={handleDelete} disabled={!canDelete} title={titleDelete} className={canDelete ? "btn" : "btnDisabled"} >Delete</button>
+            <button onClick={handleEdit} disabled={!canViewOrEdit} title={titleViewOrEdit} className="btn" > View/Edit </button>
+            <button onClick={handleDelete} disabled={!canDelete} title={titleDelete} className="btn" >Delete</button>
         </div>
     </div>
     <div><AssetSearch onSelectionChange={()=>{}} ref = {assetSearchRef} onLoad={ (e)=>handleOnLoad(e) }></AssetSearch></div>

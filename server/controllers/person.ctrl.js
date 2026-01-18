@@ -1,5 +1,6 @@
 
 import {body, validationResult} from 'express-validator';
+import bcrypt from "bcrypt";
 
 import Person from "../models/person.model.js";
 import User from '../models/user.model.js';
@@ -16,6 +17,9 @@ export const validatePerson = [
 export const createPerson = async (request, response)=>{
 
     const data = request.body; 
+    const hash = await bcrypt.hash(request.body.password, 12);
+    user.password = hash;
+
     const user = new User(data.user); 
     const person = new Person(data);
     person.user = user._id;

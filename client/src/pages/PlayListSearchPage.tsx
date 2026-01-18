@@ -1,15 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 
 import PlayListSearch, { type PlayListSearchHandle, type Previleges } from "../components/PlayList/PlayListSearch";
-import { useUser } from "../context/UserContext";
-
+import { useUserContext } from "../context/UserContext";
 
 const PlayListSearchPage = () => {
 
     const navigate = useNavigate();
-    const { getActions,  } = useUser();   
+    const { getActions,  } = useUserContext();   
 
     const playListSearchRef = useRef<PlayListSearchHandle>(null);
     const [ canViewOrEdit, setCanViewOrEdit ] = useState(false);
@@ -29,23 +28,23 @@ const PlayListSearchPage = () => {
             return ;
         }
 
-        navigate('/playlist', {state: { id: selectedItem._id }});
+        navigate('/playlist', {state: { _id: selectedItem._id }});
     }
 
     const handleDelete = () => {   
         if (!window.confirm('Are you sure you want to delete play list?'))         
-            return null ;
+            return ;
 
         playListSearchRef.current?.deleteSelectedItems();
     }
 
     const handleOnLoad = (priv: Previleges) => {
-        setTimeout(() => {
+//        setTimeout(() => {
             setCanViewOrEdit(priv.canViewOrEdit);
             setTitleViewOrEdit(priv.titleViewOrEdit);
             setCanDelete(priv.canDelete);
             setTitleDelete(priv.titleDelete);            
-        }, 0);
+//        }, 0);
     }
 
     return (
@@ -61,8 +60,8 @@ const PlayListSearchPage = () => {
   {/* RIGHT ACTIONS */}
   <div className="flex-1 flex justify-end gap-2">
     <Link to="/playlist" className="link">New</Link>
-    <button onClick={handleEdit} disabled={!canViewOrEdit} title={titleViewOrEdit} className={canViewOrEdit ? "btn" : "btnDisabled"} > View/Edit </button>
-    <button onClick={handleDelete} disabled={!canDelete} title={titleDelete} className={canDelete ? "btn" : "btnDisabled"} > Delete </button>
+    <button onClick={handleEdit} disabled={!canViewOrEdit} title={titleViewOrEdit} className="btn" > View/Edit </button>
+    <button onClick={handleDelete} disabled={!canDelete} title={titleDelete} className="btn" > Delete </button>
   </div>
 
 </div>

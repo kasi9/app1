@@ -1,11 +1,12 @@
 
 import axios from "axios";
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
-import { AppContent } from "../context/AppContext";
+
 import Pagination from "../components/Pagination";
-import { useUser } from "../context/UserContext";
+import { useAppContext } from "../context/AppContext";
+import { useUserContext } from "../context/UserContext";
 
 type SortField = "organizationName" | "code" | "rolename";
 type SortOrder = "asc" | "desc";
@@ -27,8 +28,8 @@ const Roles = () => {
     const [ filterRules, setFilterRules ] = useState<FilterRule[]>([]);
     const [ sortRules, setSortRules] = useState<SortRule[]>([]);
 
-    const { pageSize, baseURL } = useContext(AppContent)!;
-    const { token, actions, getActions} = useUser();
+    const { pageSize, baseURL } = useAppContext();
+    const { token, actions, getActions} = useUserContext();
 
     const [ totalPages, setTotalPages ] = useState(1);
     const [ currentPage, setCurrentPage ] = useState(1);

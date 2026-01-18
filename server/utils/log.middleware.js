@@ -1,41 +1,56 @@
-import Log from '../models/log.model.js' ;
+import Log from "../models/log.model.js";
 
 const logMiddleware = (req, res, next) => {
-  const start = Date.now();
+    const start = Date.now();
+    const originalSend = res.send;
 
-  const originalSend = res.send;
+    res.send = function (body) {
+        const responseTime = Date.now() - start;
+        const parsed = safeParse(body);
 
-  res.send = async function (body) {
-    try {
-      await Log.create({ tenantId: req.user?.tenantId, userId: req.user?.id, method: req.method, url: req.originalUrl, status: res.statusCode, ip: req.ip
-        , responseTime: Date.now() - start, success: toJson(body).success, responseType: toJson(body).responseType, errorCode: toJson(body).errorCode
-        , requestId: res.requestId,requestBody: req.body, responseBody: safeJson(body), });
-    } catch (err) {
-      console.error("Log save error:", err.message);
-    }
+        const logData = { tenantId: req.user?.tenantId, userId: req.user?.id, method: req.method, url: req.originalUrl, status: res.statusCode,
+            ip: req.ip, responseTime, requestId: res.requestId, success: parsed?.success ?? res.statusCode < 400, responseType: parsed?.responseType,
+            errorCode: parsed?.errorCode, requestBody: sanitize(req.body), responseBody: trimResponse(body)
+        };
 
-    return originalSend.call(this, body);
-  };
+        Log.create(logData).catch(err => console.error("Log save failed:", err.message) );
 
-  next();
+        return originalSend.call(this, body);
+    };
+
+    next();
 };
 
 export default logMiddleware;
 
-function safeJson(data) {
-  try {
-    return typeof data === "string" ? data : JSON.stringify(data);
-  } catch {
-    return "[unserializable-response]";
-  }
+function safeParse(data) {
+    try {
+        if (typeof data === "object") return data;
+            return JSON.parse(data);
+    } catch {
+        return null;
+    }
 }
 
-function toJson(value) {
-  if (typeof value === "object") return value; // already JSON
+function sanitize(body) {
+    if (!body || typeof body !== "object") return body;
 
-  try {
-    return JSON.parse(value);   // convert string → JSON
-  } catch {
-    return value;               // return original if not valid JSON
+    const clone = { ...body };
+
+    delete clone.password;
+    delete clone.token;
+    delete clone.accessToken;
+    delete clone.refreshToken;
+
+    return clone;
+}
+
+function trimResponse(data) {
+    try {
+        const str = (typeof data === "string") ? data : JSON.stringify(data);
+        // limit size to 5KB
+        return str.length > 5000 ? (str.substring(0, 5000) + "...") : str;
+    } catch {
+        return "[unserializable]";
   }
 }

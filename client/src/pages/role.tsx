@@ -1,12 +1,14 @@
 import axios, { AxiosError } from "axios";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 
-import { AppContent } from "../context/AppContext";
-import { useUser } from "../context/UserContext";
+
+
 import { FileUploader } from "../components/FileUploader";
 import { OrganizationSelect } from "../components/OrganizationSelect";
+import { useAppContext } from "../context/AppContext";
+import { useUserContext } from "../context/UserContext";
 
 interface Role { id: string, tenantId: string; organizationId: string; roleId: number, code: string, rolename: string; description: string, privileges: Privilege[]}
 interface Privilege { privilegeId: number; code: string; name: string; actions: string[] };
@@ -27,8 +29,8 @@ const Role: React.FC<Props> = ({onSave, onClose}) => {
     const location = useLocation();
     const { id } = location.state || {}; 
 
-    const { isValidataionEnabled, baseURL } = useContext(AppContent)!;
-    const { token, actions, getActions} = useUser();
+    const { isValidataionEnabled, baseURL } = useAppContext();
+    const { token, actions, getActions} = useUserContext();
 
     const [role, setRole] = useState<Role>({ id: "", tenantId: "", organizationId: "", roleId: 0, code: "", rolename: "",  description: "", privileges:[]});
     const [privileges, setPrivileges] = useState<Privilege[]>([]);

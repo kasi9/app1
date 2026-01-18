@@ -6,7 +6,7 @@ export interface Segment {
 
 export interface Asset { 
     _id?: string; 
-    id?: string; 
+//    id?: string; 
     assetType: string;
     code: string; 
     title: string; 
@@ -15,9 +15,10 @@ export interface Asset {
     filePath?: string; 
     uploadedFile?: File; 
     updateType?: string; 
-    isPreview?: boolean; 
+    isPreview?: boolean | false; 
     lat?: number; 
     lng?: number; 
     segments?: Segment[];
     tags?: string[];
+    file?: File;
 }

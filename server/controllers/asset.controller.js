@@ -16,26 +16,24 @@ const storage = new Storage({ credentials: JSON.parse(process.env.GOOGLE_APP_CRE
 const BUCKET_NAME = process.env.BUCKET_NAME;
 
 const deleteFileIfExistsGCS = async (filePath) => {
-  if (!filePath) return;
+    if (!filePath) return;
 
-  // Normalize / ensure no leading slash issues
-  const cleanPath = filePath.replace(/^\/+/, "");
+    const cleanPath = filePath.replace(/^\/+/, "");
+    const bucket = storage.bucket(BUCKET_NAME);
+    const file = bucket.file(cleanPath);
 
-  const bucket = storage.bucket(BUCKET_NAME);
-  const file = bucket.file(cleanPath);
+    try {
+        const [exists] = await file.exists();
 
-  try {
-    const [exists] = await file.exists();
+        if (!exists) {
+            console.log("File not found in bucket:", cleanPath);
+            return;
+        }
 
-    if (!exists) {
-      console.log("File not found in bucket:", cleanPath);
-      return;
-    }
-
-    await file.delete();
-    console.log("Deleted from GCS:", cleanPath);
-  } catch (err) {
-    console.error("Error deleting from GCS:", err.message);
+        await file.delete();
+        console.log("Deleted from GCS:", cleanPath);
+    } catch (err) {
+        console.error("Error deleting from GCS:", err.message);
   }
 };
 
@@ -43,7 +41,7 @@ const validateAsset = (asset) => {
 
     const errors = [];
 
-    if (!["video", "youTube", "audio", "image", "pdf", "gmap", "webLink"].includes(asset.assetType)) {
+    if (!["video", "youTube", "audio", "image", "pdf", "gmap", "webLink","text","doc"].includes(asset.assetType)) {
         errors.push( "Asset Type should be Video / YouTube / Audio / Image / PDF / Google Map / Web Link only." );
     }
     
@@ -62,9 +60,9 @@ const validateAsset = (asset) => {
 
     if (asset.assetType === "gmap") {
         const lat = Number(asset.lat);
-        const lnt = Number(asset.lnt);
+        const lng = Number(asset.lng);
 
-        if (isNaN(lat) || isNaN(lnt) || lat < -90 || lat > 90 || lnt < -180 || lnt > 180) {
+        if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
             errors.push({ error: "Latitude must be between -90 and 90, and Longitude must be between -180 and 180." });
         }
     }
@@ -86,14 +84,14 @@ export const createAsset = async (request, response) => {
     session.startTransaction();
 
     try {
-        const data = { ...request.body, filePath: request.body.filePath ? request.body.filePath : request.file.filename  
+        const data = { ...request.body, filePath: request.body.filePath || null  
             , tenantId: request.user?.tenantId, organizationId: request.user?.organizationId, createdByUserId: request.user?.id
             , segments: segments, tags: tags} ;
 
         const assetErrors = validateAsset(data)
         if (assetErrors.length>0) {
             return response.status(200).json({ success: false, responseType: 'err', message: 'Failed to create Asset', data: { data: request.body, user: request.user}
-              , errorCode: '', errors: assetErrors, requestId: '' });
+                , errorCode: '', errors: assetErrors, requestId: '' });
         };
 
         if (!data.code) {
@@ -101,10 +99,12 @@ export const createAsset = async (request, response) => {
             data.code = counter.seq;
         }
 
-        const assetNew = await Asset.create(data);
+        const assetNew = new Asset(data);
+        await assetNew.save({ session });
+//        const assetNew = await Asset.create(data, {session});
 
         for (const tag of data.tags) {
-            await TagModel.updateOne({ title: tag }, { $setOnInsert: { tenantId: data.tenantId, title: tag } }, { upsert: true });
+            await TagModel.updateOne({ title: tag }, { $setOnInsert: { tenantId: data.tenantId, title: tag } }, { upsert: true, session });
         }
 
         await session.commitTransaction();
@@ -129,31 +129,29 @@ export const updateAsset = async (request, response) => {
     let assetUpdated;
 
     try {
-    const parseJsonSafely = (value, fallback = []) => {
-        try { return JSON.parse(value); }
-        catch { return fallback; }
-    };
+        const parseJsonSafely = (value, fallback = []) => {
+        try { return JSON.parse(value); } catch { return fallback; } };
 
         const segments = parseJsonSafely(request.body.segments);
         const tags = parseJsonSafely(request.body.tags);
 
         const data = { ...request.body, tenantId: request.user?.tenantId, organizationId: request.user?.organizationId, modifiedByUserId: request.user?.id
-          , segments: segments, tags: tags,
+            , segments: segments, tags: tags,
         } ;
 
         const assetErrors = validateAsset(data)
         if (assetErrors.length>0) {
             return response.status(200).json({ success: false, responseType: 'err', message: 'Failed to create Asset', data: { data: request.body, user: request.user}
-              , errorCode: '', errors: assetErrors, requestId: '' });
+                , errorCode: '', errors: assetErrors, requestId: '' });
         };
 
         const { id } = request.params ;
         const assetOld = await Asset.findById(id);
         if (!assetOld) 
             return response.status(200).json({ success: false, responseType: 'err', message: 'Asset not exists to update', data: { data: request.body, user: request.user}
-              , errorCode: '', errors: assetErrors, requestId: '' });
+                , errorCode: '', errors: assetErrors, requestId: '' });
 
-        if (request.file) {
+        if (request.file && assetOld.filePath) {
             await deleteFileIfExists(assetOld.filePath);
 
             assetUpdated = await Asset.findByIdAndUpdate(id, 
@@ -163,8 +161,8 @@ export const updateAsset = async (request, response) => {
         else {
             assetUpdated = await Asset.findByIdAndUpdate(id, 
                 { $set: { assetType: data.assetType, code: data.code, title: data.title, description: data.description, modifiedByUserId: data.modifiedByUserId
-                  , segments: data.segments, tags: data.tags,
-                 } }, 
+                    , segments: data.segments, tags: data.tags,
+                } }, 
                 {new: true});
         }
 
@@ -179,7 +177,7 @@ export const updateAsset = async (request, response) => {
     catch (err) {    
 
         return response.status(500).json({ success: false, responseType: 'err', message: 'Failed to update Asset', data: { data: request.body, user: request.user}
-          , errorCode: '', errors: [err.message], requestId: '' });
+            , errorCode: '', errors: [err.message], requestId: '' });
 
     }
 }
@@ -187,35 +185,32 @@ export const updateAsset = async (request, response) => {
 export const deleteAsset = async (request, response) => {
 
     try {
-
         const { id } = request.params ;
         const asset = await Asset.findById(id);
         if (!asset) 
-          return response.status(404).json({ status: false, data: null, message: "Asset not found" });
+            return response.status(404).json({ status: false, data: null, message: "Asset not found" });
 
+        if (asset?.filePath) { }
         await deleteFileIfExistsGCS(asset.filePath);
 //        await deleteFileIfExists(asset.filePath);
         await Asset.findByIdAndDelete(id);
 
         response.json({ success: true, responseType: 'msg', message: 'Asset deleted successfully.', data: asset, errorCode: '', errors: [], requestId: '' });
-
     }
     catch (err) {
-
         return response.status(500).json({ success: false, responseType: 'err', message: 'Failed to update Asset', data: asset, errorCode: '', errors: [], requestId: '' });
-
     }
 }
 
 const deleteFileIfExists = (filePath) => {
-  if (!filePath) return;
+    if (!filePath) return;
 
-  const fullPath = path.join("uploads", filePath);
+    const fullPath = path.join("uploads", filePath);
 
-  if (fs.existsSync(fullPath)) {
-    fs.unlinkSync(fullPath);
-    console.log("Deleted:", fullPath);
-  }
+    if (fs.existsSync(fullPath)) {
+        fs.unlinkSync(fullPath);
+        console.log("Deleted:", fullPath);
+    }
 };
 
 /*export const getAssets = async (request, response) => {
@@ -247,7 +242,7 @@ export const getAssetsByPagination = async (req, res) => {
     let hasFilter = false ;
 
     if (parseInt(req.params.pageNo) === 0) {
-      return getAssetsByPagination2(req, res);
+        return getAssetsByPagination2(req, res);
     }
 
     try {
@@ -255,30 +250,35 @@ export const getAssetsByPagination = async (req, res) => {
 
         let filterOr = {};
         if (search && search !== "_") {
-          hasFilter = true;
+            hasFilter = true;
 
-          filterOr = {
-            $or: [
-              { code: { $regex: search, $options: "i" } },
-              { title: { $regex: search, $options: "i" } },
-            ],
-          };
+            filterOr = {
+                $or: [
+                    { type: { $regex: search, $options: "i" } },
+                    { code: { $regex: search, $options: "i" } },
+                    { title: { $regex: search, $options: "i" } },
+                    { tags: { $elemMatch: { $regex: search, $options: "i" } } },                
+                ],
+            };
         }
 
         const sortRules = sortrules ? JSON.parse(sortrules) : [];
         const sortObj = {};
         sortRules.forEach((rule) => {
-          sortObj[rule.field] = rule.order === "asc" ? 1 : -1;
+            sortObj[rule.field] = rule.order === "asc" ? 1 : -1;
         });
         if (!sortObj.createdAt) {
-          sortObj.createdAt = -1;
+            sortObj.createdAt = -1;
         }
 
         const filterRules2 = filterRules ? JSON.parse(filterRules) : [];
         const filterAnd = {};
         filterRules2.forEach((rule) => {
-          hasFilter = true;
-          filterAnd[rule.field] = { $regex: rule.value, $options: "i" };
+            hasFilter = true;
+            if (filterAnd[rule.field]=="tags")
+                filterAnd[rule.field] = { $elemMatch: { $regex: rule.value, $options: "i" }};
+            else
+                filterAnd[rule.field] = { $regex: rule.value, $options: "i" };
         });
 
         if (tags!=='[]' && tags.length>0) {
@@ -289,9 +289,7 @@ export const getAssetsByPagination = async (req, res) => {
             };
 
             const tagsArray = parseJsonSafely(tags);
-
             filterAnd['tags'] = { $all: tagsArray } ;
-
         }
 
         const filter = {
@@ -307,64 +305,77 @@ export const getAssetsByPagination = async (req, res) => {
                 { $project: 
                     { _id: 1, assetType: 1, code: 1, title: 1, lat: 1, lng: 1, segments: 1, tags: 1
                       , filePath: {
-      $cond: {
-        if: "$isUploaded",
-        then: {
-          $concat: [
-            process.env.FILE_STORAGE,
-            "/",
-            BUCKET_NAME,
-            "/",
-            "$filePath"
-          ]
-        },
-        else: "$filePath"   // or null if you prefer
-      }
-    },
+                        $cond: {
+                            if: "$isUploaded",
+                                then: {
+                                    $concat: [
+                                        process.env.FILE_STORAGE,
+                                        "/",
+                                        BUCKET_NAME,
+                                        "/",
+                                        "$filePath"
+                                    ]
+                                },
+                            else: "$filePath"   // or null if you prefer
+                            }
+                        },
                     }
                 },
                 ...(Object.keys(sortObj).length ? [{ $sort: sortObj }] : [{ $sort: { createdDate: -1 } }]),
                 { $skip: (pageNo - 1) * parseInt(pageSize) },
                 { $limit: parseInt(pageSize) },
-              ];
+            ];
 
             const [data, totalRows] = await Promise.all([
                 Asset.aggregate(pipeline),
                 Asset.countDocuments(filter),
             ]);
 
-            res.json({ result: data, totalRows, totalPages: Math.ceil(totalRows / pageSize), });
+           res.json({ result: data, totalRows, totalPages: Math.ceil(totalRows / pageSize), });
         }
         else {
             const pipeline = [
-                { $project: 
-                    { _id: 1, assetType: 1, code: 1, title: 1, lat: 1, lng: 1, segments: 1, tags: 1
-                      , filePath:{
-      $cond: {
-        if: "$isUploaded",
-        then: {
-          $concat: [
-            process.env.FILE_STORAGE,
-            "/",
-            BUCKET_NAME,
-            "/",
-            "$filePath"
-          ]
-        },
-        else: "$filePath"   // or null if you prefer
-      }
-    },
-                    }
-                },
-                ...(Object.keys(sortObj).length ? [{ $sort: sortObj }] : [{ $sort: { createdDate: -1 } }]),
-                { $skip: (pageNo - 1) * parseInt(pageSize) },
-                { $limit: parseInt(pageSize) },
-              ];
+                    { $project: 
+                        { _id: 1, assetType: 1, code: 1, title: 1, lat: 1, lng: 1, segments: 1,
+                         tags: {
+                            $reduce: {
+                            input: "$tags",
+                            initialValue: "",
+                            in: {
+                                $cond: [
+                                    { $eq: ["$$value", ""] },
+                                    "$$this",
+                                    { $concat: ["$$value", ", ", "$$this"] }
+                                ]
+                            }
+                            }
+                        },
+                        filePath:{
+                            $cond: {
+                                if: "$isUploaded",
+                                then: {
+                                $concat: [
+                                    process.env.FILE_STORAGE,
+                                    "/",
+                                    BUCKET_NAME,
+                                    "/",
+                                    "$filePath"
+                                ]
+                                },
+                                else: "$filePath"   // or null if you prefer
+                            }
+                        },
+                        }
+                    },
+                    ...(Object.keys(sortObj).length ? [{ $sort: sortObj }] : [{ $sort: { createdDate: -1 } }]),
+                    { $skip: (pageNo - 1) * parseInt(pageSize) },
+                    { $limit: parseInt(pageSize) },
+                ];
 
-            const [data, totalRows] = await Promise.all([
-                Asset.aggregate(pipeline),
-                Asset.countDocuments(),
-            ]);
+                const [data, totalRows] = await Promise.all([
+                    Asset.aggregate(pipeline),
+                    Asset.countDocuments(),
+                ]);
 
             res.json({ result: data, totalRows, totalPages: Math.ceil(totalRows / pageSize), });
         }
@@ -372,7 +383,7 @@ export const getAssetsByPagination = async (req, res) => {
     } catch (error) {
         console.error("Error in :", error);
         res.status(500).json({ error: error.message });
-  }
+    }
 };
 
 export const getAssetsByPagination2 = async (req, res) => {

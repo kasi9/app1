@@ -1,10 +1,11 @@
 import { Link } from "react-router-dom";
-import { useUser } from "../context/UserContext";
+
+import { useUserContext } from "../context/UserContext";
 import { useState } from "react";
 
 export const Navbar = () => {
 
-  const { userName, setUserName, isLoggedIn, setIsLoggedIn, logout } = useUser();
+  const { userName, setUserName, isLoggedIn, setIsLoggedIn, logout } = useUserContext();
   const [open, setOpen] = useState(false);
   const logoutHandler = () => { setUserName('');  logout(); setIsLoggedIn(false); };
     

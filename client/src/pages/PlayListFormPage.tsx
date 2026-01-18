@@ -1,24 +1,25 @@
 import {  useCallback, useEffect, useRef, useState } from "react";
 import PlayListForm, { type PlayListFormRef, type Previleges } from "../components/PlayList/PlayListForm";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import type { Asset } from "../types/asset.type";
+
 import AssetSearch, { type AssetSearchRef }  from "../components/Asset/AssetSearch";
 import { toast } from "react-toastify";
 import DraggableDialog from "./DraggableDialog";
 import AssetForm, { type AssetFormRef } from "../components/Asset/AssetForm";
-import { useUser } from "../context/UserContext";
+import { useUserContext } from "../context/UserContext";
+import type { Asset } from "../types/Asset.type";
 
 const PlayListFormPage = () => {
-    const location = useLocation();
-    const { id } = location.state || {}; 
+    const { state } = useLocation() as { state?: { _id?: string } };
+    const _id = state?._id;
     
     const navigate = useNavigate();
-    const { getActions, } = useUser();   
+    const { getActions, } = useUserContext();   
 
     const [, setSelectedItems] = useState<Asset[]>([]);
     const [openAssetSearch, setOpenAssetSearch] = useState(false);
     const [openAssetNew, setOpenAssetNew] = useState(false);
-    const [, setHasSelection] = useState(false);
+ //   const [, setHasSelection] = useState(false);
     const [ canCreateOrEdit, setCanCreateOrEdit ] = useState(false);
     const [ titleCreateOrEdit, setTitleCreateOrEdit ] = useState(""); 
     const [ canDelete, setCanDelete ] = useState(false);
@@ -26,27 +27,27 @@ const PlayListFormPage = () => {
 
     const playListFormRef = useRef<PlayListFormRef>(null);
     const assetSearchRef = useRef<AssetSearchRef>(null);
-    const AssetFormRef = useRef<AssetFormRef>(null);
+    const assetFormRef = useRef<AssetFormRef>(null);
 
     useEffect(()=>{
         getActions("playList");
         playListFormRef.current?.clear();    
     }, []);
 
-    const saveHandle = () => { 
-        playListFormRef.current?.save()
+    const saveHandle = async () => { 
+        const ok = await playListFormRef.current?.save()
 
-        if (playListFormRef.current?.playListId())
+        if (ok && playListFormRef.current?.playListId())
             navigate('/playlistlist');
     }
 
-    const handleDelete = () => {
-        if (!window.confirm("Are you sure you want to delete play list?")) {
-            return null;
-        }    
+    const handleDelete = async () => {
+        if (!window.confirm("Are you sure you want to delete play list?")) 
+            return ;  
 
-        playListFormRef.current?.delete();
-        navigate('/playlistlist');
+        const ok = await playListFormRef.current?.delete();
+        if (ok)
+            navigate('/playlistlist');
     }
 
     const handleClear = () => {
@@ -56,12 +57,12 @@ const PlayListFormPage = () => {
     const handleAdd = () => {
         const selectedItem = assetSearchRef.current?.selectedItems();
 
-        if (!selectedItem) {
-            toast.warn("Please select an asset before adding.");
+        if (!selectedItem?.length) {
+            toast.warn("Please select at least one asset before adding.");
             return;
         }
 
-        selectedItem.map((item)=>{
+        selectedItem.forEach((item)=>{
             playListFormRef.current?.addAsset({ ...item, updateType: "add" });
         }); 
         
@@ -79,7 +80,7 @@ const PlayListFormPage = () => {
 
     const handleAssetFormClose = () => {
         setOpenAssetNew(false);
-        AssetFormRef.current?.clear();
+        assetFormRef.current?.clear();
     }
 
     const handleOnLoad = (priv: Previleges) => {
@@ -97,10 +98,10 @@ const PlayListFormPage = () => {
         <div className="flex-1"></div>
         <h2 className="flex-none text-xl font-semibold text-center">Play List Form</h2>
         <div className="flex-1 flex justify-end gap-2">
-            <button onClick={saveHandle} disabled = { !canCreateOrEdit } title={ titleCreateOrEdit } className={ canCreateOrEdit ? "btn" : "btnDisabled" }>
-                { id ? "Edit" : "Save" }
+            <button onClick={saveHandle} disabled = { !canCreateOrEdit } title={ titleCreateOrEdit } className="btn" >
+                { _id ? "Edit" : "Save" }
             </button>
-            <button onClick={handleDelete} disabled = { !canDelete } title={ titleDelete } className={ canDelete ? "btn" : "btnDisabled"}>Delete</button>
+            <button onClick={handleDelete} disabled = { !canDelete } title={ titleDelete } className="btn" >Delete</button>
             <button onClick={handleClear} className="btn">Clear</button>
             <Link to = "/playlistlist" className="link">List</Link>
             <button onClick={() => setOpenAssetSearch(true)} className="btn">Select Assets</button>
@@ -108,7 +109,7 @@ const PlayListFormPage = () => {
         </div>
     </div>
     <div>
-        <PlayListForm ref={playListFormRef} onLoad={ (e) => setHasSelection(e) } onLoad2={ (e)=>handleOnLoad(e) } ></PlayListForm>
+        <PlayListForm ref={playListFormRef} onLoad2={ (e)=>handleOnLoad(e) } ></PlayListForm>
     </div>
 
     <DraggableDialog open={openAssetSearch} onClose={() => setOpenAssetSearch(false)} title="Assets List for selection">
@@ -118,9 +119,9 @@ const PlayListFormPage = () => {
     </DraggableDialog>
 
     <DraggableDialog open={openAssetNew} onClose={() => handleAssetFormClose() } title="Assets for creation">
-        <AssetForm onSave={(e) => handleAssetSave(e) } ref = {AssetFormRef} onLoad={()=>{}}></AssetForm>
+        <AssetForm onSave={(e) => handleAssetSave(e) } ref = {assetFormRef} onLoad={()=>{}}></AssetForm>
         <button onClick={() => handleAssetFormClose()} className="btn">Close</button>
-        <button className="btn" onClick={() => AssetFormRef.current?.save()}>Save</button>
+        <button className="btn" onClick={() => assetFormRef.current?.save()}>Save</button>
     </DraggableDialog>
 
 </div>

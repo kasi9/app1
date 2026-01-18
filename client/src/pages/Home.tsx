@@ -1,30 +1,15 @@
 import axios from "axios";
-import { useContext } from "react";
 import { toast } from "react-toastify";
-import { AppContent } from "../context/AppContext";
+import { useAppContext } from "../context/AppContext";
+import { FEATURES } from "../config/config";
 
 const Home = () => {
   
-    const { baseURL } = useContext(AppContent)!;
+    const { baseURL } = useAppContext();
 
-  const insertDefaultData = async () => {
-    const defaultData = 
-[
-  { "code": "org", "name": "Organizations", "actions": ["Read","Create", "Update", "Delete", "Active"]},
-	{ "code": "role", "name": "Roles", "actions": ["Read","Create", "Update", "Delete", "Active"]},
-	{ "code": "person", "name": "Person", "actions": ["Read","Create", "Update", "Delete", "Active"]},
+    const insertDefaultData = async () => {
 
-	{ "code": "asset", "name": "Asset", "actions": ["Read","Create", "Update", "Delete", "Active", "BulkCreate"]},
-	{ "code": "playList", "name": "Play List", "actions": ["Read","Create", "Update", "Delete", "Active"]},
-
-  { "code": "video", "name": "Video", "actions": ["Read","Create", "Update", "Delete", "Active"]},
-  { "code": "audio", "name": "Audio", "actions": ["Read","Create", "Update", "Delete", "Active"]},
-	{ "code": "image", "name": "Image", "actions": ["Read","Create", "Update", "Delete", "Active"]},
-	{ "code": "link", "name": "Link", "actions": ["Read","Create", "Update", "Delete", "Active"]},
-	{ "code": "place", "name": "Place", "actions": ["Read","Create", "Update", "Delete", "Active"]},
-] ;
-
-    await axios.post(`${baseURL}/privilege/bulkinsert`, defaultData);
+    await axios.post(`${baseURL}/privilege/bulkinsert`, FEATURES);
     toast.success('Default data created');
   }
   

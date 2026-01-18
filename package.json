@@ -5,7 +5,10 @@
     "app1": "concurrently \"npm run srv\" \"npm run cli\""
   },
   "dependencies": {
+    "bcrypt": "^6.0.0",
     "concurrently": "^9.2.1",
-    "git-filter-repo": "^0.0.30"
+    "docx-preview": "^0.3.7",
+    "git-filter-repo": "^0.0.30",
+    "helmet": "^8.1.0"
   }
 }

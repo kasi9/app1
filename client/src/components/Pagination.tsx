@@ -13,7 +13,7 @@ const Pagination : React.FC<PaginationProps> = ({ totalPages = 1, currentPage = 
 
     useEffect( () => {
    
-        let pages : number[] = [] ;
+        const pages : number[] = [] ;
 
         pages.push(1);
         
@@ -37,17 +37,14 @@ const Pagination : React.FC<PaginationProps> = ({ totalPages = 1, currentPage = 
 
     return (
 
-  <tr>
-    <td colSpan={5}>
-      <ul className="flex gap-2">
-        {
-        pageNos.map((page) => 
-            currentPage==page ? ( <div key={page} className="bg-yellow-600 text-white mx-2"><button key={page} className="mx-2" >{page}</button></div> ) 
-              : ( <div key={page} onClick={()=>onPageNoChange(page)} className="bg-blue-600 text-white"><button key={page} className="mx-2">{page}</button></div> ) 
-        )}
-      </ul>
-    </td>
-  </tr>   
+  <>
+  {
+  pageNos.map((page) => 
+      currentPage==page ? ( <button key={page} className="bg-yellow-600 text-white mx-2 w-10 flex">{page}</button> ) 
+        : ( <button key={page} onClick={()=>onPageNoChange(page)} className="bg-blue-600 text-white w-10 flex">{page}</button> ) 
+  )}
+
+  </>   
        
     )
 }

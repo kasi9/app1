@@ -1,4 +1,5 @@
 import { body, validationResult } from 'express-validator';
+import bcrypt from "bcrypt";
 
 import ObjectType from '../models/objectType.model.js';
 import Organization from '../models/organization.model.js';
@@ -63,6 +64,8 @@ export const registerOrganization = async (request, response)=>{
     user.organizationId = tenant._id;
     user.userType = 'admin';
     user.createdByUserId = user._id;
+const hash = await bcrypt.hash(user.password, 12);
+user.password = hash;
 
 //    const session = await mongoose.startSession();
     try{

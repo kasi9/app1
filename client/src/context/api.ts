@@ -1,7 +1,5 @@
 import axios, { type AxiosRequestConfig } from "axios";
 import { toast } from "react-toastify";
-import { useLoadingContext } from "../context/useLoadingContext";
-
 
 export const api = axios.create({ baseURL: import.meta.env.VITE_API_URL, timeout: 1000*60*5, }); // timeout 5 minutes
 
@@ -9,40 +7,44 @@ export const api = axios.create({ baseURL: import.meta.env.VITE_API_URL, timeout
 let requestCount = 0;
 
 const showGlobalLoader = () => {
-  requestCount++;
-  window.__showLoader?.();
+    requestCount++;
+    window.__showLoader?.();
 };
 
 const hideGlobalLoader = () => {
-  requestCount = Math.max(0, requestCount - 1);
-  if (requestCount === 0) window.__hideLoader?.();
+    requestCount = Math.max(0, requestCount - 1);
+    if (requestCount === 0) window.__hideLoader?.();
 };
 
 // ---- Bridge: register loader functions ----
 export const registerAxiosLoader = (show: () => void, hide: () => void) => {
-  window.__showLoader = show;
-  window.__hideLoader = hide;
+    window.__showLoader = show;
+    window.__hideLoader = hide;
 };
 
 export interface CustomAxiosConfig extends AxiosRequestConfig {
-  hideMessage?: boolean;
+    hideMessage?: boolean;
 }
 
-const prepareErrorMessage = (message: string, errors: string[]) => {
-  return errors?.reduce((msg, err) => msg + "\n* " + err, message);
+const prepareErrorMessage = (message: string="", errors: string[]=[]) => {
+    return errors?.reduce((msg, err) => msg + "\n* " + err, message);
 };
 
-api.interceptors.request.use((config) => {
-    showGlobalLoader();
-    const token = localStorage.getItem("token"); 
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
+api.interceptors.request.use(
+  
+    (config) => {
+        showGlobalLoader();
+        const token = localStorage.getItem("token"); 
+        if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+        }
 
-    config.withCredentials = true;
+        config.withCredentials = true;
 
-    return config;
-});
+        return config;
+    },
+    (error) => { hideGlobalLoader(); return Promise.reject(error); }
+);
 
 api.interceptors.response.use(
 
@@ -61,8 +63,7 @@ api.interceptors.response.use(
     },
     (err) => {
         hideGlobalLoader();
-//        const errMessage = prepareErrorMessage(err.response.data.message, err.response.data.errors);
-        const errMessage = prepareErrorMessage(err.response.data.message, err.response.data.data.errors);
+        const errMessage = prepareErrorMessage(err?.response?.data?.message ?? "", err?.response?.data?.errors ?? err?.response?.data?.data?.errors ?? [] );
 
         if (axios.isAxiosError(err)) {
             toast.error(errMessage ?? "Something went wrong", { style: { whiteSpace: "pre-line" }, });

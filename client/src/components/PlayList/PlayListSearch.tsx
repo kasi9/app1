@@ -1,13 +1,13 @@
 
-import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { PlayList } from "../../types/PlayList.type";
 import axios from "axios";
-import { AppContent } from "../../context/AppContext";
-import { useUser } from "../../context/UserContext";
+
 import Pagination from "../Pagination";
-import { useAudit } from "../../context/useAudit";
 import { toast } from "react-toastify";
 import { api, type CustomAxiosConfig } from "../../context/api";
+import { useAppContext } from "../../context/AppContext";
+import { useUserContext } from "../../context/UserContext";
 
 export interface PlayListSearchHandle { 
     add: () => Omit<PlayList, 'id'> | null; 
@@ -27,11 +27,9 @@ interface FilterRule { field: keyof PlayList; value: string; }
 interface SortRule { field: keyof PlayList; order: SortOrder; }
 
 const PlayListSearch = forwardRef<PlayListSearchHandle, PlayListSearchProps> (({ onSelectionChange, onLoad }, ref)=>{
-    const { baseURL } = useContext(AppContent)!;
-    const { token, actions, getActions } = useUser();
-    const { trackAction } = useAudit();
+    const { baseURL, pageSize } = useAppContext();
+    const { token, actions, getActions } = useUserContext();
     
-    const { pageSize } = useContext(AppContent)!;
     const [ totalPages, setTotalPages ] = useState(1); 
     const [ currentPage, setCurrentPage ] = useState(1);
     const [ search, setSearch] = useState('');
@@ -40,7 +38,8 @@ const PlayListSearch = forwardRef<PlayListSearchHandle, PlayListSearchProps> (({
 
     const [playLists, setPlayLists] = useState<PlayList[]>([]);
     const [selectedItems, setSelectedItems] = useState<PlayList[]>([]);
-    const [ privileges, ] = useState<Previleges> ({canViewOrEdit: false, titleViewOrEdit: "", canDelete: false, titleDelete: ""});
+    const [ privileges, setPrivileges ] = useState<Previleges> ({canViewOrEdit: false, titleViewOrEdit: "", canDelete: false, titleDelete: ""});
+    const [showFilter, setShowFilter] = useState(false);
 
     const selectAllRef = useRef<HTMLInputElement | null>(null);
 
@@ -58,20 +57,22 @@ const PlayListSearch = forwardRef<PlayListSearchHandle, PlayListSearchProps> (({
         pageLoad();
     }, []);
 
-    useEffect(() => {
-     
-        getData(currentPage);
+    useEffect(()=>{
+        onLoad(privileges);
+    },[privileges]);
 
+    useEffect(() => {
+        getData(currentPage);
     }, [currentPage, filterRules, sortRules]);
 
     const pageLoad = async () => {
-        await getActions('asset') ;
+        await getActions('playList') ;
         setPrivileges2(selectedItems);
     }
 
     const setPrivileges2 = (items: PlayList[]) => {
 
-        const privs = privileges ;
+        const privs = { ...privileges } ;
 
         if (!actions.includes('View') && !actions.includes('Update') ) {
             privs.canViewOrEdit = false;
@@ -103,7 +104,7 @@ const PlayListSearch = forwardRef<PlayListSearchHandle, PlayListSearchProps> (({
             privs.titleDelete = "";
         }
 
-        onLoad(privs);
+        setPrivileges(privs);
     }
 
     useImperativeHandle(ref, () => ({
@@ -122,7 +123,7 @@ const PlayListSearch = forwardRef<PlayListSearchHandle, PlayListSearchProps> (({
             }
 
             await Promise.all(
-            selectedItems?.map(i =>           
+            selectedItems.map(i =>           
                 axios.delete(`${baseURL}/playlists/${i._id}`, { headers: { Authorization: `Bearer ${token}` } })
             ));
 
@@ -134,24 +135,15 @@ const PlayListSearch = forwardRef<PlayListSearchHandle, PlayListSearchProps> (({
             
             setSelectedItems([]);
             onSelectionChange(false);
-            await getData(1);
+            await getData(currentPage);
         }
     }));
 
     const onSearchHandler = () => {
-        trackAction("Clicked Search Button", { query: "some search text dommmm  kasi" });
         setCurrentPage(1);
-        getData(1);
+        getData(currentPage);
     }
-    
-    const toggleFilter = () => {
-        const filterElement = document.getElementById('filter');
-
-        if (filterElement) {
-            filterElement.className = filterElement.className === "hidden" ? "table-row" : "hidden";
-        }
-    }
-    
+       
     const setFilter = (field: keyof PlayList, value: string) => {
 
         setFilterRules((prev) => {
@@ -240,14 +232,14 @@ const PlayListSearch = forwardRef<PlayListSearchHandle, PlayListSearchProps> (({
     onKeyUp ={(e) =>  e.key === "Enter" && onSearchHandler() } 
     placeholder="Search playlists..." />
   <button onClick={onSearchHandler} className="btn">Search</button>
-  <button onClick={toggleFilter} className="btn">{'>>'}</button>
+  <button onClick={()=>{setShowFilter(v => !v)}} className="btn">{'>>'}</button>
 </div>
 
 <table className="w-full border-collapse">
 <thead className="bg-gray-100">
 
   {/* FILTER ROW */}
-  <tr id="filter" className="hidden">
+  <tr className={showFilter ? "table-row" : "hidden"}>
     <th className="p-2"></th>
     <th className="p-2">
       <input onChange={(e)=>setFilter('code',e.target.value)} className="border w-full px-1"/>
@@ -259,7 +251,7 @@ const PlayListSearch = forwardRef<PlayListSearchHandle, PlayListSearchProps> (({
 
   {/* HEADER ROW */}
   <tr>
-    <th className="w-12 p-2 text-center"><input type="checkbox" onChange={handleSelectAll} ref={selectAllRef} disabled = { playLists?.length>0 ? false : true }/></th>
+    <th className="w-12 p-2 text-center"><input type="checkbox" onChange={handleSelectAll} ref={selectAllRef} disabled = { playLists?.length===0 }/></th>
     <th onClick={(e)=>handleSort("code", e.ctrlKey)}  className="p-2 text-left cursor-pointer">Code {getSortIndicator('code')}</th>
     <th onClick={(e)=>handleSort("title", e.ctrlKey)}  className="p-2 text-left cursor-pointer">Title {getSortIndicator('title')}</th>
   </tr>
@@ -269,7 +261,7 @@ const PlayListSearch = forwardRef<PlayListSearchHandle, PlayListSearchProps> (({
   {actions.includes("Read") ? (
     playLists?.map(p => (
       <tr key={p._id} className="hover:bg-gray-100 cursor-pointer" onClick={() => handleSelect(p)} >
-        <td className="w-12 p-2 text-center"><input type="checkbox" checked={selectedItems.some(i => i._id === p._id)} readOnly /></td>
+        <td className="w-12 p-2 text-center"><input type="checkbox" onChange={() => handleSelect(p)} onClick={e => e.stopPropagation()} checked={selectedItems.some(i => i._id === p._id)} readOnly /></td>
         <td className="p-2 text-left">{p.code}</td>
         <td className="p-2 text-left">{p.title}</td>
       </tr>

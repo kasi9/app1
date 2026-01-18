@@ -1,17 +1,18 @@
 
 
-import React, { useContext, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
-import { AppContent } from "../context/AppContext";
-import { useUser } from "../context/UserContext";
-import { api } from "../context/api";
+
+import { api, type CustomAxiosConfig } from "../context/api";
+import { useAppContext } from "../context/AppContext";
+import { useUserContext } from "../context/UserContext";
 
 interface Login { userName: string; password: string};
 
 const Login = () => {
-    const { isValidataionEnabled, baseURL } = useContext(AppContent)!;
-    const { setUserName, setIsLoggedIn } = useUser();
+    const { isValidataionEnabled, baseURL } = useAppContext();
+    const { setUserName, setIsLoggedIn } = useUserContext();
 
     const navigate = useNavigate();
     const [ login, setLogin ] = useState<Login>({userName: '', password: ''});
@@ -31,17 +32,16 @@ const Login = () => {
             }
         }
         
-        await api.get(`${baseURL}/users/login/${login.userName}`).then(res => {   
+        await api.post(`${baseURL}/users/login`, { userName: login.userName, password: login.password }, { hideMessage: true } as CustomAxiosConfig)
+       /* await api.get(`${baseURL}/users/login/${login.userName}/${login.password}`, { hideMessage: true } as CustomAxiosConfig)*/.then(res => {   
             if (res.data.success) {       
                 localStorage.setItem('token', res.data.data.token);
                 setUserName(res.data.data.user.name);
                 setIsLoggedIn(true);
 
-                toast.success(res.data.message);
                 navigate('/');
             }
-            else
-                toast.error(res.data.message);
+
         });
     } ;
 

@@ -1,8 +1,9 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import type { Asset } from "../../types/asset.type";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import type { Asset } from "../../types/Asset.type";
 import type { YouTubePlayer } from "react-youtube";
 import YouTube from "react-youtube";
 import { toast } from "react-toastify";
+import { renderAsync } from "docx-preview";
 
 export interface AssetViewerRef { 
     viewOrPlay: () => void;
@@ -16,81 +17,115 @@ export interface AssetViewerRef {
     pauseVideo: () => void;
 }
 
-interface AssetViewerProps { 
-    src: Asset[]; 
-    onPrePlay?: () => void;
-}
+interface AssetViewerProps { assets: Asset[]; onPrePlay?: () => void; }
 
-const AssetViewer = forwardRef<AssetViewerRef, AssetViewerProps>(({ src, onPrePlay }, ref) => {
+type SegmentPlayer = { play: () => void; pause: () => void; getTime: () => number; setTime: (t: number) => void; };
+
+const AssetViewer = forwardRef<AssetViewerRef, AssetViewerProps>(({ assets, onPrePlay }, ref) => {
 
     const divRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement>(null);
     const imgRef = useRef<HTMLImageElement>(null);
-    const documentRef = useRef<HTMLIFrameElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
     const youTubeVideoRef = useRef<YouTubePlayer>(null);
-    const timerRef = useRef<number | null>(null);
-    const fullScreenRef = useRef<HTMLButtonElement>(null);
-    const downloadRef = useRef<HTMLButtonElement>(null);
-    const playAllRef = useRef<HTMLButtonElement>(null);
-    const previousRef = useRef<HTMLButtonElement>(null);
-    const stopRef = useRef<HTMLButtonElement>(null);
-    const nextRef = useRef<HTMLButtonElement>(null);
+    const docRef = useRef<HTMLDivElement | null>(null);
+    const intervalRef = useRef<number | null>(null);
 
-    const [currentIndex, setCurrentIndex] = useState<number|null>(null);
-    const [, setIsFullscreen] = useState(false);
-    const [isAutoPlay, setIsAutoPlay] = useState(false);
+    const [ currentIndex, setCurrentIndex ] = useState<number|null>(null);
+    const [ isPlaying, setIsPlaying ] = useState(false);
+    const [ , setIsFullscreen] = useState(false);
+    const [ text, setText ] = useState("");
 
     useImperativeHandle(ref, () => ({
-        viewOrPlay: () => playAudio(),
-        movePrevious: () => setCurrentIndex(prev => (prev === null ? null : prev-1)),
-        moveNext: () => setCurrentIndex(prev => (prev === null ? null : prev+1)),
-        stop: () => clearTimer(),
-        getCurrentTime: () => { 
-            if (src[currentIndex!].assetType == "youTube")
-                return youTubeVideoRef.current.getCurrentTime() | 0 ;
-            else if (src[currentIndex!].assetType === "video")
-                return videoRef.current?.currentTime ?? 0;
-            else if (src[currentIndex!].assetType === "audio")
-                return audioRef.current?.currentTime ?? 0;
-
-            return 0;
-        },
-        seekTo: (sec: number) => { 
-            if (src[currentIndex!].assetType == "youTube"){
-                youTubeVideoRef.current.seekTo(sec, true) ;
-            }
-            else if (src[currentIndex!].assetType === "video"){
-                console.log('adsfldkj');
-                videoRef.current!.currentTime = sec;
-            }
-            else if (src[currentIndex!].assetType === "audio"){
-                audioRef.current!.currentTime = sec;
-            }
-        },
+        viewOrPlay: playAudio,
+        movePrevious: movePrevious2,
+        moveNext: moveNext2,
+        stop: clearTimer,
+        getCurrentTime: getPlayingTimeNow,
+        seekTo: getSeekToTimeNow,
         pauseVideo: () => youTubeVideoRef.current?.pauseVideo(),
     }));
+
+    const movePrevious2 = () => {
+        setCurrentIndex(prev => {
+            if (prev === null) return 0;
+            return Math.max(prev - 1, 0);
+        });
+    }
+
+    const moveNext2 = () => {
+        setCurrentIndex(prev => {
+            if (prev === null) return 0;
+            return Math.min(prev + 1, assets.length - 1);
+        });
+    }
+
+    const privileges = useMemo(() => ({
+        canFullScreen: assets.length > 0,
+        canDownload: assets.length === 1,
+        canPlayAll: assets.length > 1,
+        canPrev: currentIndex != null && currentIndex > 0,
+        canNext: currentIndex != null && currentIndex < assets.length - 1,
+        canStop: isPlaying,
+    }), [assets.length, currentIndex, isPlaying]);
+
+    const currentAsset = useMemo(() => {
+        if (currentIndex == null) return null;
+        return assets[currentIndex] ?? null;
+    }, [assets, currentIndex]);
+
+    const getPlayingTimeNow = () => {
+        if (currentAsset?.assetType == "youTube")
+            return youTubeVideoRef.current.getCurrentTime() | 0 ;
+        else if (currentAsset?.assetType === "video")
+            return videoRef.current?.currentTime ?? 0;
+        else if (currentAsset?.assetType === "audio")
+            return audioRef.current?.currentTime ?? 0;
+
+        return 0;        
+    }
+
+    const getSeekToTimeNow = (sec: number) => {
+        if (currentAsset?.assetType == "youTube"){
+            youTubeVideoRef.current.seekTo(sec, true) ;
+        }
+        else if (currentAsset?.assetType === "video"){
+            videoRef.current!.currentTime = sec;
+        }
+        else if (currentAsset?.assetType === "audio"){
+            audioRef.current!.currentTime = sec;
+        }        
+    }
 
     const playAuto = () => {
         onPrePlay?.();
         setCurrentIndex(0);
-        setIsAutoPlay(true);
+        setIsPlaying(true);
         viewOrPlayAsset(0)
         toast.success('Started playing...');
     }
 
     const stopAutoPlay = () => {
         clearTimer();
-        setIsAutoPlay(false);
+        setIsPlaying(false);
     }
 
     useEffect(() => {
 
         const handleKeyPress = (event: KeyboardEvent) => {
+            clearTimer();
             if (event.key === "ArrowLeft") {
-                setCurrentIndex(prev => (previousRef.current?.className === "btn") ? (prev??0) - 1 : 0);
-            } else if (event.key === "ArrowRight") {
-                setCurrentIndex(prev => (nextRef.current?.className === "btn") ? (prev??0) + 1 : prev);
+                setCurrentIndex(prev => {
+                if (prev === null) return 0;
+                return Math.max(prev - 1, 0);
+                });
+            }
+
+            if (event.key === "ArrowRight") {
+                setCurrentIndex(prev => {
+                if (prev === null) return 0;
+                return Math.min(prev + 1, assets.length - 1);
+                });
             }
         };
 
@@ -107,128 +142,64 @@ const AssetViewer = forwardRef<AssetViewerRef, AssetViewerProps>(({ src, onPrePl
             document.removeEventListener("fullscreenchange", handleFullScreenChange);
         }
 
-    }, []);
+    }, [assets.length]);
 
     useEffect(()=>{
-        setCurrentIndex(()=>src.length-1);
-    },[src]); 
+        setCurrentIndex(assets.length > 0 ? assets.length - 1 : null);
+    },[assets]); 
 
     useEffect(() => {   
 
         if (currentIndex !== null) {
-            if (isAutoPlay && (src[currentIndex]?.assetType === "pdf" || src[currentIndex]?.assetType === "webLink"))
+            if (isPlaying && (currentAsset?.assetType === "pdf" || currentAsset?.assetType === "webLink"))
                 toast.warn('Press next button to move next slide.');
+            
             viewOrPlayAsset(currentIndex);
         }
 
     }, [currentIndex]);
 
     useEffect(() => {
-        if (isAutoPlay && currentIndex === src.length - 1) {
+        if (isPlaying && currentIndex === assets.length - 1) {
             toast.success("Playing ended.");
         }
-    }, [isAutoPlay, currentIndex, src.length]);
+    }, [isPlaying, currentIndex, assets.length]);
 
     useEffect(() => {
-        setButtons();
-    }, [src, currentIndex]);
+        if (currentAsset?.isPreview && currentAsset?.assetType==="doc")
+            setDocPreview();
+        else if (currentAsset && currentAsset?.assetType==="text"/* && currentAsset?.file*/) 
+            setTextPreview(currentAsset ?? null);
 
-    const setButtons = () => {
-
-        if (fullScreenRef.current && src && src.length > 0) {
-            fullScreenRef.current.className = "btn"        
-            fullScreenRef.current.disabled = false;
-        } else {
-            if (fullScreenRef.current) {
-                fullScreenRef.current.className = "btnDisabled"        
-                fullScreenRef.current.disabled = true;
-            }
-        }
-
-        if (downloadRef.current && src && src.length === 1 ) {
-            downloadRef.current.className = "btn";
-            downloadRef.current.disabled = false;
-        } else {
-            if (downloadRef.current) {
-                downloadRef.current.className = "btnDisabled";
-                downloadRef.current.disabled = true;
-            }
-        }
-
-        if (playAllRef.current && src && src.length > 1 ) {
-            playAllRef.current.className = "btn";
-            playAllRef.current.disabled = false;
-        } else {
-            if (playAllRef.current) {
-                playAllRef.current.className = "btnDisabled";
-                playAllRef.current.disabled = true;
-            }
-        }
-
-        if (previousRef.current && currentIndex && currentIndex > 0) {
-            previousRef.current.className = "btn";
-            previousRef.current.disabled = false;
-        } else {
-            if (previousRef.current) {
-                previousRef.current.className = "btnDisabled";
-                previousRef.current.disabled = true;
-            }
-        }
-
-        if (stopRef.current && currentIndex && src && currentIndex < (src.length-1)) {
-//console.log('stop enabled: ', currentIndex, src);            
-            stopRef.current.className = "btn";
-            stopRef.current.disabled = false;
-        } else {
-//console.log('stop else: ', currentIndex, src);            
-            if (stopRef.current) {
-//console.log('stop disabled: ', currentIndex, src);            
-                stopRef.current.className = "btnDisabled";
-                stopRef.current.disabled = true;
-            }
-        }
-
-        if (nextRef.current && currentIndex && src && currentIndex < (src.length-1)) {
-            nextRef.current.className = "btn";
-            nextRef.current.disabled = false;
-        } else {
-            if (nextRef.current) {
-                nextRef.current.className = "btnDisabled";
-                nextRef.current.disabled = true;
-            }
-        }
-
-    }
+    }, [assets, currentIndex]);
 
     const viewOrPlayAsset = (idx: number) => {
 
         clearTimer();
 
-        if (!src[idx]) {
-            return;
-        }
+        const asset = assets[idx];
+        if (!asset) return;
 
-        if (src[idx].assetType === "audio") 
-            playAudio();
-        else if (src[idx].assetType === "image" || src[idx].assetType === "gmap") 
-            startSlideshow();            
-        else if (src[idx].assetType === "video") 
-            setTimeout(() => playVideo(), 1000);      
-        else if (src[idx].assetType === "youTube") {  
-            setTimeout(() => playYouTubeVideo(), 2000);        
-        }
+        switch (asset.assetType) {
+            case "audio": return playAudio();
+            case "image":
+            case "gmap": return startSlideshow();
+            case "video": return setTimeout(playVideo, 1000);
+            case "youTube": return setTimeout(playYouTubeVideo, 2000);
+        }        
     }
 
     const startSlideshow = () => {
         clearTimer();
 
-        timerRef.current = setInterval(() => {
+        intervalRef.current = setInterval(() => {
+            
             setCurrentIndex(prev => {
                 const next =  (prev === null ? null : prev + 1);
 
-                if (next !== null && next >= src.length) {
+                if (next !== null && next >= assets.length) {
                     clearTimer();
-                    setIsAutoPlay(()=>false);
+                    setIsPlaying(()=>false);
 
                     return prev;
                 }
@@ -244,129 +215,37 @@ const AssetViewer = forwardRef<AssetViewerRef, AssetViewerProps>(({ src, onPrePl
         const audio = audioRef.current;
         if (!audio) return;
 
-        if (src[currentIndex!].segments ?? [].length>0)
-            playAudioSegments();
+        if ((currentAsset?.segments ?? []).length>0)
+            playSegments({ play: () => audio.play(), pause: () => audio.pause(), getTime: () => audio.currentTime, setTime: t => (audio.currentTime = t), });
 
-        audio.pause();
         audio.currentTime = 0;
-
-        if (isAutoPlay)
+        if (isPlaying)
             audio.oncanplay = () => audio.play().catch(err => console.warn("Autoplay blocked:", err));
         else
             audio.pause();
     };
-  
-    const playAudioSegments = async () => {
-        if (currentIndex === null) return;
-
-        let player = await audioRef.current;
-        if (!player) {
-            console.warn("⚠ YouTube Player not ready. Retrying...");
-            player = audioRef.current;
-        }        
-
-        const segments = src[currentIndex]?.segments ?? [];
-        if (segments.length === 0) 
-            return;
-
-        for (const seg of segments) {
-            player!.currentTime = seg.start;
-            player!.play();
-
-            await new Promise<void>((resolve) => {
-            const interval = setInterval(() => {
-                const current = player!.currentTime;
-                if (current >= seg.end!) {
-                player!.pause();
-                clearInterval(interval);
-                resolve();
-                }
-            }, 1000); 
-            });
-        }
-
-        setCurrentIndex(prev => {
-            const next =  (prev === null ? null : prev + 1);
-
-            if (next !== null && next >= src.length) {
-                clearTimer();
-                setIsAutoPlay(()=>false);
-
-                return prev;
-            }
-
-            return next;
-        });
-
-        console.log("✅ Finished playing all segments");
-    };
 
     const playVideo = () => {
-        if (timerRef.current) clearTimer();
+        if (intervalRef.current) clearTimer();
 
         const video = videoRef.current;
         if (!video) return;
 
-        if (src[currentIndex!].segments ?? [].length>0)
-            playVideoSegments();
+        if ((currentAsset?.segments ?? []).length>0)
+            playSegments({ play: () => video.play(), pause: () => video.pause(), getTime: () => video.currentTime, setTime: t => (video.currentTime = t), });
 
         video.currentTime = 0;
-        if (isAutoPlay)
+        if (isPlaying)
             video.oncanplay = () => video.play().catch(err => console.log("Autoplay blocked:", err));
         else 
             video.pause();
 
     };
 
-    const playVideoSegments = async () => {
-        if (currentIndex === null) return;
-
-        let player = await videoRef.current;
-        if (!player) {
-            console.warn("⚠ YouTube Player not ready. Retrying...");
-            player = videoRef.current;
-        }        
-
-        const segments = src[currentIndex]?.segments ?? [];
-        if (segments.length === 0) 
-            return;
-
-        for (const seg of segments) {
-            player!.currentTime = seg.start;
-            player!.play();
-
-            await new Promise<void>((resolve) => {
-            const interval = setInterval(() => {
-                const current = player!.currentTime;
-                if (current >= seg.end!) {
-                player!.pause();
-                clearInterval(interval);
-                resolve();
-                }
-            }, 1000); 
-            });
-        }
-
-        setCurrentIndex(prev => {
-            const next =  (prev === null ? null : prev + 1);
-
-            if (next !== null && next >= src.length) {
-                clearTimer();
-                setIsAutoPlay(()=>false);
-
-                return prev;
-            }
-
-            return next;
-        });
-
-        console.log("✅ Finished playing all segments");
-    };
-
     const handleAudioOrVideoEnded = () => {
         const next = (currentIndex !== null ? currentIndex + 1 : null);
 
-        if (next !== null && next < src.length) {
+        if (next !== null && next < assets.length) {
             setCurrentIndex(next);
             viewOrPlayAsset(next);
         }
@@ -377,71 +256,82 @@ const AssetViewer = forwardRef<AssetViewerRef, AssetViewerProps>(({ src, onPrePl
     };
 
     const playYouTubeVideo = () => {
-        if (!src || currentIndex === null)
+        if (!assets || currentIndex === null)
             return ;
 
-        if (timerRef.current) clearTimer();
+        if (intervalRef.current) clearTimer();
 
         const video = youTubeVideoRef.current;
         if (!video) return;
 
-        if (src[currentIndex].segments ?? [].length>0)
-            playYouTubeSegments();
+        if ((currentAsset?.segments ?? []).length>0)
+            playSegments({ play: () => video.playVideo(), pause: () => video.pauseVideo(), getTime: () => video.getCurrentTime(), setTime: t => video.seekTo(t, true) });
         
         video.seekTo(0);
         video.playVideo();
     };
 
-    const playYouTubeSegments = async () => {
-        if (currentIndex === null) return;
+    const setDocPreview = async () => {
+        const file = currentAsset?.file;
+        const arrayBuffer = await file?.arrayBuffer();
+        await renderAsync(arrayBuffer, docRef.current!);            
+    }
 
-        let player = await youTubeVideoRef.current;
-        if (!player) {
-            console.warn("⚠ YouTube Player not ready. Retrying...");
-            player = youTubeVideoRef.current;
-        }        
-
-        const segments = src[currentIndex]?.segments ?? [];
-        if (segments.length === 0) 
-            return;
-
-        for (const seg of segments) {
-            player.seekTo(seg.start);
-            player.playVideo();
-
-            await new Promise<void>((resolve) => {
-            const interval = setInterval(() => {
-                const current = player.getCurrentTime();
-                if (current >= seg.end!) {
-                player.pauseVideo();
-                clearInterval(interval);
-                resolve();
-                }
-            }, 1000); 
-            });
+    const setTextPreview = async (asset: Asset | null) => {
+        if (!asset?.file) {
+            await fetch(`${asset?.filePath}`).then(res => res.text()).then(setText).catch(console.error);
+            return ;
         }
-        
+
+        const reader = new FileReader();
+        reader.onload = () => setText(reader.result as string);       
+        reader.readAsText(asset.file);                
+    }
+
+    const goNextAfterSegments = () => {
         setCurrentIndex(prev => {
-            const next =  (prev === null ? null : prev + 1);
+            if (prev === null) return prev;
 
-            if (next !== null && next >= src.length) {
+            const next = prev + 1;
+
+            if (next >= assets.length) {
                 clearTimer();
-                setIsAutoPlay(()=>false);
-
-                return prev;
+                setIsPlaying(false);
+                return prev; // stay on last
             }
 
             return next;
         });
+    };
 
+    const playSegments = async (player: SegmentPlayer) => {
+        if (currentIndex === null) return;
 
-        console.log("✅ Finished playing all segments");
+        const segments = currentAsset?.segments ?? [];
+        if (!segments.length) return;
+
+        for (const seg of segments) {
+            player.setTime(seg.start);
+            player.play();
+
+            await new Promise<void>(resolve => {
+            const i = setInterval(() => {
+                if (player.getTime() >= seg.end!) {
+                player.pause();
+                clearInterval(i);
+                resolve();
+                }
+            }, 300);
+            });
+        }
+
+        goNextAfterSegments();
     };
 
     const clearTimer = () => {
-        if (timerRef.current) {
-            clearInterval(timerRef.current);
-            timerRef.current = null;
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
         }
     }
 
@@ -466,66 +356,88 @@ const AssetViewer = forwardRef<AssetViewerRef, AssetViewerProps>(({ src, onPrePl
   {/* LEFT SECTION – CONTROLS */}
   <div className="md:w-1/5 w-full border-r p-2 space-y-2">
 
-    <button onClick={openFullscreen} ref = { fullScreenRef } >Full Screen</button>
-    <button onClick={() => downloadFile(src[0].filePath ?? "")} ref = { downloadRef } >Download</button>
-    <button onClick={playAuto} ref = { playAllRef } >Play All</button>
-    <button onClick={() => setCurrentIndex(prev => (prev === null ? null : prev - 1))} ref = { previousRef} >Previous</button>
-    <button onClick={stopAutoPlay} ref = { stopRef } >Stop</button>
-    <button onClick={() => setCurrentIndex(prev => (prev === null ? 0 : prev + 1))} ref = { nextRef } >Next</button>
+    <button onClick={ openFullscreen } className="btn" disabled = { !privileges.canFullScreen } >Full Screen</button>
+    <button onClick={ ()=> downloadFile(assets[0].filePath ?? "")} className="btn" disabled = { !privileges.canDownload } >Download</button>
+    <button onClick={ ()=> playAuto() } className="btn" disabled = { !privileges.canPlayAll } >Play All</button>
+    <button onClick={ ()=> movePrevious2() } className="btn" 
+        disabled = { !privileges?.canPrev } >Previous</button>
+    <button onClick={ ()=> stopAutoPlay() } className="btn" disabled = { !privileges?.canStop } >Stop</button>
+    <button onClick={ ()=> moveNext2() } className="btn" disabled = { !privileges?.canNext }>Next</button>
   </div>
 
   {/* RIGHT SECTION – VIEWER */}
   <div className="md:w-4/5 w-full h-full flex items-center justify-center">
 
-        {(currentIndex !== null &&  src[currentIndex]?.assetType === "video") && (
+        {(currentIndex !== null &&  currentAsset?.assetType === "video") && (
             <div style={{ width: "100%", height: "90%", display:"flex", justifyContent:"center", alignItems:"center", }}>
-                <video key={src[currentIndex].filePath} ref={videoRef} controls onEnded={ handleAudioOrVideoEnded }>
-                    <source src= {src[currentIndex]?.filePath} type="video/mp4" />
+                <video key="video" ref={videoRef} controls onEnded={ handleAudioOrVideoEnded }>
+                    <source src= {currentAsset?.filePath} type="video/mp4" />
                 </video>
             </div>
         )}
 
-        {(currentIndex !== null &&  src[currentIndex]?.assetType === "youTube") && (
+        {(currentIndex !== null &&  currentAsset?.assetType === "youTube") && (
             <div style={{ width:"100%", height:"90%", display:"flex", justifyContent:"center", alignItems:"center"}}>
-                <YouTube videoId={`${src[currentIndex]?.filePath}`} onReady={onYouTubeReady} onEnd={ handleAudioOrVideoEnded }
+                <YouTube videoId={`${currentAsset?.filePath}`} onReady={onYouTubeReady} onEnd={ handleAudioOrVideoEnded }
                     opts={{ width: "100%", height: "100%", playerVars: { autoplay: 0, }, }} className="youtube-container"/>
             </div>
         )}
 
-        {(currentIndex !== null &&  src[currentIndex]?.assetType === "audio") && (
+        {(currentIndex !== null &&  currentAsset?.assetType === "audio") && (
             <div style={{ width:"100%", height:"90%", display:"flex", justifyContent:"center", alignItems:"center", }}>
-                <audio key={src[currentIndex]?.filePath} ref={audioRef} controls src= {src[currentIndex]?.filePath} onEnded={ handleAudioOrVideoEnded } />
+                <audio key="audio" ref={audioRef} controls src= {currentAsset?.filePath} onEnded={ handleAudioOrVideoEnded } />
             </div>
         )}
 
-        {(currentIndex !== null &&  src[currentIndex]?.assetType === "image") && ( // final don't change alignment
+        {(currentIndex !== null &&  currentAsset?.assetType === "image") && ( // final don't change alignment
             <div className="w-full h-full flex items-center justify-center">
-            <img key={src[currentIndex].filePath} ref={imgRef} src= {src[currentIndex]?.filePath} className="max-w-full max-h-full object-contain"/>
+            <img key="image" ref={imgRef} src= {currentAsset?.filePath} className="max-w-full max-h-full object-contain"/>
             </div>
         )}
 
-        {(currentIndex !== null &&  src[currentIndex]?.assetType === "pdf") && (
+        {(currentIndex !== null &&  currentAsset?.assetType === "pdf") && (
             <div style={{ width:"100%", height:"90%", display:"flex", justifyContent:"center", alignItems:"center", }}>
-                <iframe style={{ width:"100%", height:"100%"}} src= {src[currentIndex]?.filePath} ref = {documentRef} title="PDF Viewer" 
+                <iframe style={{ width:"100%", height:"100%"}} src= {currentAsset?.filePath} title="PDF Viewer" 
                 />
             </div>
         )}
 
-        {(currentIndex !== null &&  src[currentIndex]?.assetType === "gmap") && (
+        {(currentIndex !== null &&  currentAsset?.assetType === "gmap") && (
             <div style={{ width:"100%", height:"90%", display:"flex", justifyContent:"center", alignItems:"center", }}>
-                <iframe src={`https://www.google.com/maps?q=${src[currentIndex]?.lat},${src[currentIndex]?.lng}&z=14&output=embed`}
+                <iframe src={`https://www.google.com/maps?q=${currentAsset?.lat},${currentAsset?.lng}&z=14&output=embed`}
                     loading="lazy" allowFullScreen referrerPolicy="no-referrer-when-downgrade"     
                     style={{ width: "100%", height: "100%", border: 0, }}>
                 </iframe>
             </div>
         )}
 
-        {(currentIndex !== null &&  src[currentIndex]?.assetType === "webLink") && (
+        {(currentIndex !== null &&  currentAsset?.assetType === "webLink") && (
             <div style={{ width:"100%", height:"90%", display:"flex", justifyContent:"center", alignItems:"center", }}>
-                <iframe src={`${src[currentIndex]?.filePath}`} style={{ width: "100%", height: "100%", border: 0 }} loading="lazy" allowFullScreen referrerPolicy="no-referrer-when-downgrade">
+                <iframe src={`${currentAsset?.filePath}`} style={{ width: "100%", height: "100%", border: 0 }} 
+                    loading="lazy" allowFullScreen referrerPolicy="no-referrer-when-downgrade">
                 </iframe>
             </div>
         )}
+
+        {(currentIndex !== null &&  currentAsset?.assetType === "text") && (
+            <div style={{ width:"100%", height:"90%", display:"flex", justifyContent:"center", alignItems:"center", }}>
+                <pre>{ text }</pre>
+            </div>
+        )}
+
+        {(currentIndex !== null &&  currentAsset?.assetType === "doc" && !currentAsset.file) && (
+            <div style={{ width:"100%", height:"90%", display:"flex", justifyContent:"center", alignItems:"center", }}>
+                <iframe src={`https://docs.google.com/gview?url=${encodeURIComponent(currentAsset.filePath)}&embedded=true`} 
+                    width="100%" height="600" 
+                />
+            </div>
+        )}
+        {(currentIndex !== null &&  currentAsset?.assetType === "doc" && currentAsset?.file) && (
+            <div style={{ width:"100%", height:"90%", display:"flex", justifyContent:"center", alignItems:"center", }}>
+            <div ref={docRef} />
+            </div>
+        )}
+
   </div>
 </div>
 

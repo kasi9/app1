@@ -13,8 +13,8 @@ const AssetSchema = new mongoose.Schema({
 
     isActive: {type: Boolean, required: true, default: true},
     isEditable: {type: Boolean, required: true, default: true},
-    createdDate: {type: Date, required: true, default: new Date()},
-    dateTimeStamp: {type: Date, required:true, default: new Date()},
+    createdDate: {type: Date, required: true, default: Date.now },
+    dateTimeStamp: {type: Date, required:true, default: Date.now },
     createdByUserId: mongoose.Schema.Types.ObjectId,
 //    modifiedByUserId: mongoose.Schema.Types.ObjectId,
     

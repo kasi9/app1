@@ -32,8 +32,8 @@
     @apply border-2 bg-blue-500 px-4 rounded-md hover:bg-blue-400 hover:font-bold focus:bg-blue-400 focus:font-bold active:bg-red-700
 }
 
-.btnDisabled {
-    @apply border-2 bg-blue-500 px-4 rounded-md opacity-75
+.btn:disabled {
+    @apply opacity-70 cursor-not-allowed
 }
 
 .table {

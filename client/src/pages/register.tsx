@@ -1,11 +1,12 @@
 
 import axios, { AxiosError } from 'axios';
-import React, { useContext, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { useNavigate } from "react-router-dom";
-import { AppContent } from '../context/AppContext';
+
+import { useAppContext } from '../context/AppContext';
+import { useUserContext } from '../context/UserContext';
 import { FileUploader } from '../components/FileUploader';
-import { useUser } from '../context/UserContext';
 
 interface ValidationError { msg: string; param?: string; location?: string; }
 interface Register { code: string; organizationName: string; address: string; 
@@ -14,9 +15,9 @@ interface Register { code: string; organizationName: string; address: string;
 
 const Register = () => {	
 
-	const { isValidataionEnabled, baseURL } = useContext(AppContent)!;
+	const { isValidataionEnabled, baseURL } = useAppContext();
 	const navigate = useNavigate();
-	const { token } = useUser();
+	const { token } = useUserContext();
 	
 	const [register, setRegister] = useState<Register>({"code": "", "organizationName": "", "address": "", "loginName": "", "password": "", "personName": "", "mobileNo": "", "personAddress": ""});
 	const [ tenentLogo, setTenentLogo ] = useState<File | null>(null);

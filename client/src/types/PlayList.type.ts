@@ -1,8 +1,8 @@
-import type { Asset } from "./asset.type";
+import type { Asset } from "../types/Asset.type";
 
 export interface PlayList { 
     _id?: string; 
-    id?: string; 
+//    id?: string; 
     code: string; 
     title: string; 
     description: string; 

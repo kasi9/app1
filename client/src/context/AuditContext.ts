@@ -1,6 +1,7 @@
 import axios from "axios";
-import { useCallback, useContext } from "react";
-import { AppContent } from "./AppContext";
+import { useCallback } from "react";
+import { useAppContext } from "./AppContext";
+
 
 export type AuditDetails = Record<string, unknown> | string | number | null;
 
@@ -16,9 +17,9 @@ export const logUserAction = async (baseURL: string, action: string, details?: A
 
 export const useAudit = () => {
 
-    const { baseURL } = useContext(AppContent)!; 
+    const { baseURL } = useAppContext(); 
     
-    const trackAction = useCallback((action: string, details?: AuditDetails) => {
+    const trackAction = useCallback((action: string, details?: AuditDetails) => { 
         logUserAction(baseURL, action, details);
     }, [baseURL]);
 

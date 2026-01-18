@@ -1,11 +1,12 @@
 import axios, { AxiosError } from "axios";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 
-import { AppContent } from "../context/AppContext";
-import { useUser } from "../context/UserContext";
+
 import { OrganizationSelect } from "../components/OrganizationSelect";
+import { useAppContext } from "../context/AppContext";
+import { useUserContext } from "../context/UserContext";
 
 interface Organization {id: string; tenantId: string|null; parentId: string|null; code: string; organizationName: string; address: string; };
 interface ValidationError { msg: string; param?: string; location?: string; }
@@ -17,8 +18,8 @@ const Organization = () => {
     const location = useLocation();
     const { id } = location.state || {}; 
 
-    const { isValidataionEnabled, baseURL } = useContext(AppContent)!;
-    const { token, actions, getActions } = useUser();
+    const { isValidataionEnabled, baseURL } = useAppContext();
+    const { token, actions, getActions } = useUserContext();
 
     const [org, setOrg] = useState<Organization>({id: "", tenantId: null, parentId: null, code:"", organizationName: "", address:""});
     const [logoSrc, setLogoSrc] = useState<string>("");

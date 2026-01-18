@@ -2,10 +2,12 @@
 import axios from "axios";
 import { useContext, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { AppContent } from "../context/AppContext";
+
 import Pagination from "../components/Pagination";
-import { useUser } from "../context/UserContext";
-import { useAudit } from "../context/useAudit";
+
+import { useAudit } from "../context/AuditContext";
+import { useAppContext } from "../context/AppContext";
+import { useUserContext } from "../context/UserContext";
 
 interface Organization {_id: string; code: string; organizationName: string; parentName: string; address: string;};
 interface User { code: string; organizationName: string; parentName: string; }
@@ -22,8 +24,8 @@ const Organizations = () => {
     const [ filterRules, setFilterRules ] = useState<FilterRule[]>([]);
     const [ sortRules, setSortRules ] = useState<SortRule[]>([]);
 
-    const { pageSize, baseURL } = useContext(AppContent)!;
-    const { token, actions, getActions } = useUser();
+    const { pageSize, baseURL } = useAppContext();
+    const { token, actions, getActions } = useUserContext();
     const [ totalPages, setTotalPages ] = useState(1); 
     const [ currentPage, setCurrentPage ] = useState(1);
 
