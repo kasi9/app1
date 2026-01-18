@@ -29,7 +29,7 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 // CLIENT_URL=https://app1.vercel.app,https://admin.app1.com
 
-app.use(cors({
+/*app.use(cors({
    origin: (origin, cb) => {
     if (!origin || allowedOrigins.includes(origin)) 
         cb(null, true);
@@ -37,9 +37,9 @@ app.use(cors({
         cb(new Error("CORS blocked"));
     },
     credentials: true
-}));
+}));*/
 
-//app.use( cors({ origin: process.env.CLIENT_URL, methods: ["GET","POST","PUT","DELETE","OPTIONS"], allowedHeaders: ["Content-Type", "Authorization"], credentials: true, }) );
+app.use( cors({ origin: process.env.CLIENT_URL, methods: ["GET","POST","PUT","DELETE","OPTIONS"], allowedHeaders: ["Content-Type", "Authorization"], credentials: true, }) );
 app.use((req, res, next) => {
     try {
         logMiddleware(req, res, next);
